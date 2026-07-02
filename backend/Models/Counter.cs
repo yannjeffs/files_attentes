@@ -12,16 +12,6 @@ public class Counter
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-    public Counter(int id, int agencyId, int number, string name, bool isActive, DateTime createdAt)
-    {
-        Id = id;
-        AgencyId = agencyId;
-        Number = number;
-        Name = name;
-        IsActive = isActive;
-        CreatedAt = createdAt;
-    }
-
     // Navigation
     public Agency Agency { get; set; } = null!;
     public ICollection<Ticket> Tickets { get; set; } = new List<Ticket>();
