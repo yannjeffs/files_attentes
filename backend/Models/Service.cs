@@ -13,17 +13,6 @@ public class Service
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-    public Service(int id, int agencyId, string name, string code, string? description, bool isActive, DateTime createdAt)
-    {
-        Id = id;
-        AgencyId = agencyId;
-        Name = name;
-        Code = code;
-        Description = description;
-        IsActive = isActive;
-        CreatedAt = createdAt;
-    }
-
     // Navigation
     public Agency Agency { get; set; } = null!;
     public ICollection<Ticket> Tickets { get; set; } = new List<Ticket>();
