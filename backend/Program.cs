@@ -21,6 +21,7 @@ builder.Services.AddSignalR();
 
 // JWT Service
 builder.Services.AddScoped<JwtService>();
+builder.Services.AddScoped<QueueService>();
 
 // Authentication JWT
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
