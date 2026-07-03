@@ -10,112 +10,82 @@ namespace backend.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
 public class TicketsController : ControllerBase
 {
-    private readonly QueueService _queueService;
     private readonly AppDbContext _context;
+    private readonly QueueService _queueService;
+    private readonly QueueNotificationService _notificationService;
 
-    public TicketsController(QueueService queueService, AppDbContext context)
+    public TicketsController(
+        AppDbContext context,
+        QueueService queueService,
+        QueueNotificationService notificationService)
     {
-        _queueService = queueService;
         _context = context;
+        _queueService = queueService;
+        _notificationService = notificationService;
     }
 
-    // POST: api/tickets
+    // POST api/tickets
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] TicketCreateDto dto)
     {
-        // Vérifier si le service existe et est actif
-        var service = await _context.Services.FindAsync(dto.ServiceId);
+        var service = await _context.Services
+            .Include(s => s.Agency)
+            .FirstOrDefaultAsync(s => s.Id == dto.ServiceId);
+
         if (service == null || !service.IsActive)
             return BadRequest(new { message = "Service introuvable ou inactif." });
 
-        // Parser la priorité
         if (!Enum.TryParse<TicketPriority>(dto.Priority, out var priority))
-            priority = TicketPriority.Normal; // Valeur par défaut si la priorité est invalide
+            priority = TicketPriority.Normal;
 
-        // Créer ou retrouver le client
         var client = await _context.Clients
-            .FirstOrDefaultAsync(c => c.Phone == dto.Phone && c.FirstName == dto.FirstName && c.LastName == dto.LastName);
+            .FirstOrDefaultAsync(c => c.Phone == dto.Phone);
 
-        client ??= new Client
+        if (client == null)
         {
-            FirstName = dto.FirstName,
-            LastName = dto.LastName,
-            Phone = dto.Phone,
-            Email = dto.Email,
-            AccountNumber = dto.AccountNumber
-        };
+            client = new Client
+            {
+                FirstName = dto.FirstName,
+                LastName = dto.LastName,
+                Phone = dto.Phone,
+                Email = dto.Email,
+                AccountNumber = dto.AccountNumber
+            };
+            _context.Clients.Add(client);
+            await _context.SaveChangesAsync();
+        }
 
-        _context.Clients.Add(client);
-        await _context.SaveChangesAsync();
-
-        // Générer le numéro de ticket
         var ticketNumber = await _queueService.GenerateTicketNumberAsync(dto.ServiceId);
+        var estimatedWait = await _queueService.EstimateWaitTimeAsync(dto.ServiceId);
 
-        // Calculer le temps d'attente estimé
-        var estimatedWaitTime = await _queueService.EstimateWaitTimeAsync(dto.ServiceId);
-
-        // Créer le ticket
         var ticket = new Ticket
         {
             ServiceId = dto.ServiceId,
             ClientId = client.Id,
             TicketNumber = ticketNumber,
+            Source = TicketSource.Web,
             Status = TicketStatus.Waiting,
             Priority = priority,
-            IssuedAt = DateTime.UtcNow,
-            EstimatedWaitTime = estimatedWaitTime
+            EstimatedWaitTime = estimatedWait
         };
 
         _context.Tickets.Add(ticket);
         await _context.SaveChangesAsync();
 
-        // Recharger avec les relations pour la réponse
         await _context.Entry(ticket).Reference(t => t.Service).LoadAsync();
         await _context.Entry(ticket).Reference(t => t.Client).LoadAsync();
 
-        return CreatedAtAction(nameof(GetById), new { id = ticket.Id }, MapToResponseDto(ticket));
+        var ticketDto = MapToResponseDto(ticket);
+
+        // Notifier via SignalR
+        await _notificationService.NotifyTicketCreatedAsync(service.AgencyId, ticketDto);
+
+        return CreatedAtAction(nameof(GetById), new { id = ticket.Id }, ticketDto);
     }
 
-    // GET: api/tickets/{id}
-    [HttpGet("{id}")]
-    public async Task<IActionResult> GetById(int id)
-    {
-        var ticket = await _context.Tickets
-            .Include(t => t.Service)
-            .Include(t => t.Client)
-            .Include(t => t.Agent)
-            .FirstOrDefaultAsync(t => t.Id == id);
-
-        if (ticket == null)
-            return NotFound(new { message = "Ticket introuvable." });
-
-        return Ok(MapToResponseDto(ticket));
-    }
-
-    // GET: api/tickets/queue/{serviceId} - File d'attente pour un service donné
-    [HttpGet("queue/{serviceId}")]
-    [Authorize]
-    public async Task<IActionResult> GetQueue(int serviceId)
-    {
-        var tickets = await _context.Tickets
-            .Include(t => t.Service)
-            .Include(t => t.Client)
-            .Include(t => t.Counter)
-            .Include(t => t.Agent)
-            .Where(t => t.ServiceId == serviceId &&
-                   (t.Status == TicketStatus.Waiting || t.Status == TicketStatus.Called))
-            .OrderByDescending(t => t.Priority == TicketPriority.VIP)
-            .ThenBy(t => t.IssuedAt)
-            .ToListAsync();
-
-        var ticketDtos = tickets.Select(MapToResponseDto);
-        return Ok(ticketDtos);
-    }
-
-    // PUT: api/tickets/{id}/call - Appel du client suivant
+    // PUT api/tickets/{id}/call
     [HttpPut("{id}/call")]
     [Authorize(Roles = "Agent,Admin")]
     public async Task<IActionResult> Call(int id)
@@ -131,21 +101,27 @@ public class TicketsController : ControllerBase
             return NotFound(new { message = "Ticket introuvable." });
 
         if (ticket.Status != TicketStatus.Waiting)
-            return BadRequest(new { message = "Le ticket n'est pas en attente." });
+            return BadRequest(new { message = "Ce ticket n'est pas en attente." });
 
-        // Récupérer l'agent connecté
-        var agentId = int.Parse(User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)!.Value);
+        var agentId = int.Parse(User.FindFirst(
+            System.Security.Claims.ClaimTypes.NameIdentifier)!.Value);
 
         ticket.Status = TicketStatus.Called;
         ticket.CalledAt = DateTime.UtcNow;
         ticket.AgentId = agentId;
 
         await _context.SaveChangesAsync();
+        await _context.Entry(ticket).Reference(t => t.Agent).LoadAsync();
 
-        return Ok(MapToResponseDto(ticket));
+        var ticketDto = MapToResponseDto(ticket);
+
+        // Notifier via SignalR
+        await _notificationService.NotifyTicketCalledAsync(ticket.Service.AgencyId, ticketDto);
+
+        return Ok(ticketDto);
     }
 
-    // PUT: api/tickets/{id}/start - Début du service pour le ticket
+    // PUT api/tickets/{id}/start
     [HttpPut("{id}/start")]
     [Authorize(Roles = "Agent,Admin")]
     public async Task<IActionResult> Start(int id)
@@ -161,17 +137,22 @@ public class TicketsController : ControllerBase
             return NotFound(new { message = "Ticket introuvable." });
 
         if (ticket.Status != TicketStatus.Called)
-            return BadRequest(new { message = "Le ticket n'a pas encore été appelé." });
+            return BadRequest(new { message = "Ce ticket n'a pas encore été appelé." });
 
         ticket.Status = TicketStatus.InProgress;
         ticket.StartedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
 
-        return Ok(MapToResponseDto(ticket));
+        var ticketDto = MapToResponseDto(ticket);
+
+        // Notifier via SignalR
+        await _notificationService.NotifyTicketStartedAsync(ticket.Service.AgencyId, ticketDto);
+
+        return Ok(ticketDto);
     }
 
-    // PUT api/tickets/{id}/complete — Agent termine le traitement
+    // PUT api/tickets/{id}/complete
     [HttpPut("{id}/complete")]
     [Authorize(Roles = "Agent,Admin")]
     public async Task<IActionResult> Complete(int id)
@@ -194,10 +175,15 @@ public class TicketsController : ControllerBase
 
         await _context.SaveChangesAsync();
 
-        return Ok(MapToResponseDto(ticket));
+        var ticketDto = MapToResponseDto(ticket);
+
+        // Notifier via SignalR
+        await _notificationService.NotifyTicketCompletedAsync(ticket.Service.AgencyId, ticketDto);
+
+        return Ok(ticketDto);
     }
 
-    // PUT api/tickets/{id}/noshow — Client absent
+    // PUT api/tickets/{id}/noshow
     [HttpPut("{id}/noshow")]
     [Authorize(Roles = "Agent,Admin")]
     public async Task<IActionResult> NoShow(int id)
@@ -218,10 +204,15 @@ public class TicketsController : ControllerBase
 
         await _context.SaveChangesAsync();
 
-        return Ok(MapToResponseDto(ticket));
+        var ticketDto = MapToResponseDto(ticket);
+
+        // Notifier via SignalR
+        await _notificationService.NotifyTicketNoShowAsync(ticket.Service.AgencyId, ticketDto);
+
+        return Ok(ticketDto);
     }
 
-    // PUT api/tickets/{id}/cancel — Annuler un ticket
+    // PUT api/tickets/{id}/cancel
     [HttpPut("{id}/cancel")]
     public async Task<IActionResult> Cancel(int id)
     {
@@ -244,7 +235,7 @@ public class TicketsController : ControllerBase
         return Ok(new { message = "Ticket annulé avec succès." });
     }
 
-    // PUT api/tickets/{id}/transfer — Transférer vers un autre service
+    // PUT api/tickets/{id}/transfer
     [HttpPut("{id}/transfer")]
     [Authorize(Roles = "Agent,Admin")]
     public async Task<IActionResult> Transfer(int id, [FromBody] TicketTransferDto dto)
@@ -261,11 +252,9 @@ public class TicketsController : ControllerBase
         if (newService == null || !newService.IsActive)
             return BadRequest(new { message = "Service de destination introuvable ou inactif." });
 
-        // Marquer l'ancien ticket comme transféré
         ticket.Status = TicketStatus.Transferred;
         ticket.EndedAt = DateTime.UtcNow;
 
-        // Créer un nouveau ticket dans le nouveau service
         var newTicketNumber = await _queueService.GenerateTicketNumberAsync(dto.NewServiceId);
         var estimatedWait = await _queueService.EstimateWaitTimeAsync(dto.NewServiceId);
 
@@ -283,6 +272,10 @@ public class TicketsController : ControllerBase
         _context.Tickets.Add(newTicket);
         await _context.SaveChangesAsync();
 
+        await _notificationService.NotifyTicketTransferredAsync(
+            ticket.Service.AgencyId,
+            MapToResponseDto(ticket));
+
         return Ok(new
         {
             message = "Ticket transféré avec succès.",
@@ -290,8 +283,43 @@ public class TicketsController : ControllerBase
         });
     }
 
+    // GET api/tickets/{id}
+    [HttpGet("{id}")]
+    public async Task<IActionResult> GetById(int id)
+    {
+        var ticket = await _context.Tickets
+            .Include(t => t.Service)
+            .Include(t => t.Client)
+            .Include(t => t.Counter)
+            .Include(t => t.Agent)
+            .FirstOrDefaultAsync(t => t.Id == id);
 
-    // Méthode utilitaire de mappage d'un Ticket vers un TicketResponseDto
+        if (ticket == null)
+            return NotFound(new { message = "Ticket introuvable." });
+
+        return Ok(MapToResponseDto(ticket));
+    }
+
+    // GET api/tickets/queue/{serviceId}
+    [HttpGet("queue/{serviceId}")]
+    [Authorize]
+    public async Task<IActionResult> GetQueue(int serviceId)
+    {
+        var tickets = await _context.Tickets
+            .Include(t => t.Service)
+            .Include(t => t.Client)
+            .Include(t => t.Counter)
+            .Include(t => t.Agent)
+            .Where(t => t.ServiceId == serviceId &&
+                   (t.Status == TicketStatus.Waiting ||
+                    t.Status == TicketStatus.Called))
+            .OrderByDescending(t => t.Priority == TicketPriority.VIP)
+            .ThenBy(t => t.IssuedAt)
+            .ToListAsync();
+
+        return Ok(tickets.Select(MapToResponseDto));
+    }
+
     private static TicketResponseDto MapToResponseDto(Ticket ticket)
     {
         return new TicketResponseDto

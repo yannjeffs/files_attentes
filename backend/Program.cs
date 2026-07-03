@@ -22,6 +22,7 @@ builder.Services.AddSignalR();
 // JWT Service
 builder.Services.AddScoped<JwtService>();
 builder.Services.AddScoped<QueueService>();
+builder.Services.AddScoped<QueueNotificationService>();
 
 // Authentication JWT
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -82,5 +83,7 @@ app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+
+app.MapHub<backend.Hubs.QueueHub>("/hubs/queue");
 
 app.Run();
