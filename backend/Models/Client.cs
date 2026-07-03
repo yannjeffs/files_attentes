@@ -13,17 +13,6 @@ public class Client
     public string? AccountNumber { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-    public Client(int id, string firstName, string lastName, string? email, string phone, string? accountNumber, DateTime createdAt)
-    {
-        Id = id;
-        FirstName = firstName;
-        LastName = lastName;
-        Email = email;
-        Phone = phone;
-        AccountNumber = accountNumber;
-        CreatedAt = createdAt;
-    }
-
     // Navigation
     public ICollection<Ticket> Tickets { get; set; } = new List<Ticket>();
 }
