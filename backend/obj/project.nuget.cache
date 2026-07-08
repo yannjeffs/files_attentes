@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "jvXrlq3aYto=",
+  "dgSpecHash": "aRlNLkDMjD0=",
   "success": true,
   "projectFilePath": "C:\\Users\\yannn\\OneDrive\\Documents\\CDWFS\\Stage Académique\\file_attente\\backend\\backend.csproj",
   "expectedPackageFiles": [
@@ -61,7 +61,8 @@
     "C:\\Users\\yannn\\.nuget\\packages\\system.identitymodel.tokens.jwt\\8.19.1\\system.identitymodel.tokens.jwt.8.19.1.nupkg.sha512",
     "C:\\Users\\yannn\\.nuget\\packages\\system.memory.data\\8.0.1\\system.memory.data.8.0.1.nupkg.sha512",
     "C:\\Users\\yannn\\.nuget\\packages\\system.security.cryptography.pkcs\\9.0.4\\system.security.cryptography.pkcs.9.0.4.nupkg.sha512",
-    "C:\\Users\\yannn\\.nuget\\packages\\system.security.cryptography.protecteddata\\9.0.4\\system.security.cryptography.protecteddata.9.0.4.nupkg.sha512"
+    "C:\\Users\\yannn\\.nuget\\packages\\system.security.cryptography.protecteddata\\9.0.4\\system.security.cryptography.protecteddata.9.0.4.nupkg.sha512",
+    "C:\\Users\\yannn\\.nuget\\packages\\twilio\\7.14.9\\twilio.7.14.9.nupkg.sha512"
   ],
   "logs": [
     {

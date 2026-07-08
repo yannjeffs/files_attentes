@@ -15,13 +15,6 @@ public class WhatsAppNotification
     public DateTime? SentAt { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-    public WhatsAppNotification(int ticketId, string phone, string message)
-    {
-        TicketId = ticketId;
-        Phone = phone;
-        Message = message;
-    }
-
     // Navigation
     public Ticket Ticket { get; set; } = null!;
 }

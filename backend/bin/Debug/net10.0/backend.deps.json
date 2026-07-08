@@ -15,7 +15,8 @@
           "Microsoft.EntityFrameworkCore.Design": "10.0.9",
           "Microsoft.EntityFrameworkCore.SqlServer": "10.0.9",
           "Swashbuckle.AspNetCore": "10.2.3",
-          "System.IdentityModel.Tokens.Jwt": "8.19.1"
+          "System.IdentityModel.Tokens.Jwt": "8.19.1",
+          "Twilio": "7.14.9"
         },
         "runtime": {
           "backend.dll": {}
@@ -846,6 +847,19 @@
             "fileVersion": "9.0.425.16305"
           }
         }
+      },
+      "Twilio/7.14.9": {
+        "dependencies": {
+          "Microsoft.IdentityModel.Tokens": "8.19.1",
+          "Newtonsoft.Json": "13.0.3",
+          "System.IdentityModel.Tokens.Jwt": "8.19.1"
+        },
+        "runtime": {
+          "lib/net6.0/Twilio.dll": {
+            "assemblyVersion": "7.14.9.0",
+            "fileVersion": "7.14.9.0"
+          }
+        }
       }
     }
   },
@@ -1225,6 +1239,13 @@
       "sha512": "sha512-o94k2RKuAce3GeDMlUvIXlhVa1kWpJw95E6C9LwW0KlG0nj5+SgCiIxJ2Eroqb9sLtG1mEMbFttZIBZ13EJPvQ==",
       "path": "system.security.cryptography.protecteddata/9.0.4",
       "hashPath": "system.security.cryptography.protecteddata.9.0.4.nupkg.sha512"
+    },
+    "Twilio/7.14.9": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-dYFgEoNofKasj2cpYddZT7yVkBexkQz4eTlQ4c72BO2H1H8UbTGGl9Aa7NIFBUuTcdNWOYwIZlHjmitlRng28g==",
+      "path": "twilio/7.14.9",
+      "hashPath": "twilio.7.14.9.nupkg.sha512"
     }
   }
 }

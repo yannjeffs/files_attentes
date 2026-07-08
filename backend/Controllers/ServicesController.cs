@@ -9,7 +9,6 @@ namespace backend.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
 public class ServicesController : ControllerBase
 {
     private readonly AppDbContext _context;

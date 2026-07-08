@@ -15,15 +15,18 @@ public class TicketsController : ControllerBase
     private readonly AppDbContext _context;
     private readonly QueueService _queueService;
     private readonly QueueNotificationService _notificationService;
+    private readonly WhatsAppService _whatsAppservice;
 
     public TicketsController(
         AppDbContext context,
         QueueService queueService,
-        QueueNotificationService notificationService)
+        QueueNotificationService notificationService,
+        WhatsAppService whatsAppService)
     {
         _context = context;
         _queueService = queueService;
         _notificationService = notificationService;
+        _whatsAppservice = whatsAppService;
     }
 
     // POST api/tickets
@@ -37,8 +40,7 @@ public class TicketsController : ControllerBase
         if (service == null || !service.IsActive)
             return BadRequest(new { message = "Service introuvable ou inactif." });
 
-        if (!Enum.TryParse<TicketPriority>(dto.Priority, out var priority))
-            priority = TicketPriority.Normal;
+        var priority = TicketPriority.Normal;
 
         var client = await _context.Clients
             .FirstOrDefaultAsync(c => c.Phone == dto.Phone);
@@ -82,6 +84,9 @@ public class TicketsController : ControllerBase
         // Notifier via SignalR
         await _notificationService.NotifyTicketCreatedAsync(service.AgencyId, ticketDto);
 
+        // WhatsApp - confirmation immédiate
+        await _whatsAppservice.SendTicketConfirmationAsync(ticket);
+
         return CreatedAtAction(nameof(GetById), new { id = ticket.Id }, ticketDto);
     }
 
@@ -117,6 +122,9 @@ public class TicketsController : ControllerBase
 
         // Notifier via SignalR
         await _notificationService.NotifyTicketCalledAsync(ticket.Service.AgencyId, ticketDto);
+
+        // WhatsApp - Notification d'appel
+        await _whatsAppservice.SendTicketConfirmationAsync(ticket);
 
         return Ok(ticketDto);
     }

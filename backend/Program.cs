@@ -23,6 +23,7 @@ builder.Services.AddSignalR();
 builder.Services.AddScoped<JwtService>();
 builder.Services.AddScoped<QueueService>();
 builder.Services.AddScoped<QueueNotificationService>();
+builder.Services.AddScoped<WhatsAppService>();
 
 // Authentication JWT
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -71,6 +72,19 @@ builder.Services.AddSwaggerGen(options =>
     });*/
 });
 
+// CORS
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("QoraPolicy", policy =>
+    {
+        policy
+            .WithOrigins("http://localhost:5173") // port Vite
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials(); // nécessaire pour SignalR
+    });
+});
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -80,6 +94,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseCors("QoraPolicy");
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

@@ -67,7 +67,7 @@ export interface Ticket {
   status: TicketStatus;
   priority: TicketPriority;
   source: TicketSource;
-  extimatedWaitTime?: number;
+  estimatedWaitTime?: number;
   counterNumber?: number;
   agentName?: string;
   issuedAt?: string;
@@ -78,12 +78,11 @@ export interface Ticket {
 
 export interface TicketCreateRequest {
   serviceId: number;
-  fiestName: string;
+  firstName: string;
   lastName: string;
   phone: string;
   email?: string;
   accountNumber?: string;
-  priority: TicketPriority;
 }
 
 export interface DashboardStats {

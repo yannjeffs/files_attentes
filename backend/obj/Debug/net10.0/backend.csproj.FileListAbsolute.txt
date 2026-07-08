@@ -164,3 +164,4 @@ C:\Users\yannn\OneDrive\Documents\CDWFS\Stage Académique\file_attente\backend\o
 C:\Users\yannn\OneDrive\Documents\CDWFS\Stage Académique\file_attente\backend\obj\Debug\net10.0\backend.genruntimeconfig.cache
 C:\Users\yannn\OneDrive\Documents\CDWFS\Stage Académique\file_attente\backend\obj\Debug\net10.0\ref\backend.dll
 C:\Users\yannn\OneDrive\Documents\CDWFS\Stage Académique\file_attente\backend\bin\Debug\net10.0\BCrypt-Net-Next.dll
+C:\Users\yannn\OneDrive\Documents\CDWFS\Stage Académique\file_attente\backend\bin\Debug\net10.0\Twilio.dll
