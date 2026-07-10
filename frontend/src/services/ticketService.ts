@@ -1,4 +1,4 @@
-import type { Ticket, TicketCreateRequest } from "../@types";
+import type { Ticket, TicketCreateRequest, TicketPosition, TicketUpdateClientRequest } from "../@types";
 import api from "./api";
 
 export const ticketService = {
@@ -45,4 +45,18 @@ export const ticketService = {
   transfer: async (id: number, newServiceId: number): Promise<void> => {
     await api.put(`tickets/${id}/transfer`, { newServiceId });
   },
+
+  getPosition: async(id: number): Promise<TicketPosition> => {
+    const response = await api.get<TicketPosition>(`/tickets/${id}/position`);
+    return response.data;
+  },
+
+  // Modifier les infos de contact du client
+  updateClient: async (
+    id: number,
+    data: TicketUpdateClientRequest
+  ): Promise<Ticket> => {
+    const response = await api.put<Ticket>(`/tickets/${id}/update-client`, data);
+    return response.data;
+  }
 };

@@ -51,6 +51,66 @@ public class WhatsAppService
         await SaveAndSendAsync(ticket.Id, client.Phone, message);
     }
 
+    // Notification de progression — envoyée aux seuils 5, 3, 1
+    public async Task SendPositionUpdateAsync(
+        Ticket ticket,
+        int peopleAhead)
+    {
+        var client = await _context.Clients.FindAsync(ticket.ClientId);
+        if (client == null) return;
+
+        // On construit le message selon la position
+        string message;
+
+        if (peopleAhead == 0)
+        {
+            // Ne devrait pas arriver ici (géré par SendTicketCalledAsync)
+            // mais on le traite par sécurité
+            message =
+                $"🔔 *C'est votre tour, {client.FirstName} !*\n\n" +
+                $"🎫 *Ticket :* {ticket.TicketNumber}\n\n" +
+                $"Présentez-vous immédiatement au guichet.\n\n" +
+                $"_SCB Cameroun — Qora Queue Management_";
+        }
+        else if (peopleAhead == 1)
+        {
+            // Le client est le prochain — alerte importante
+            message =
+                $"⚡ *Vous êtes le suivant, {client.FirstName} !*\n\n" +
+                $"🎫 *Ticket :* {ticket.TicketNumber}\n" +
+                $"👥 *Personnes avant vous :* 1\n\n" +
+                $"Préparez-vous, vous allez être appelé très prochainement.\n\n" +
+                $"_SCB Cameroun — Qora Queue Management_";
+        }
+        else if (peopleAhead == 3)
+        {
+            message =
+                $"⏳ *Encore 3 personnes avant vous, {client.FirstName}*\n\n" +
+                $"🎫 *Ticket :* {ticket.TicketNumber}\n" +
+                $"👥 *Personnes avant vous :* {peopleAhead}\n" +
+                $"⏱ *Attente estimée :* ~{peopleAhead * 5} min\n\n" +
+                $"Restez attentif, vous serez appelé bientôt.\n\n" +
+                $"_SCB Cameroun — Qora Queue Management_";
+        }
+        else if (peopleAhead == 5)
+        {
+            message =
+                $"📊 *Mise à jour de votre file, {client.FirstName}*\n\n" +
+                $"🎫 *Ticket :* {ticket.TicketNumber}\n" +
+                $"👥 *Personnes avant vous :* {peopleAhead}\n" +
+                $"⏱ *Attente estimée :* ~{peopleAhead * 5} min\n\n" +
+                $"Vous pouvez commencer à vous diriger vers l'agence.\n\n" +
+                $"_SCB Cameroun — Qora Queue Management_";
+        }
+        else
+        {
+            // Ne devrait pas arriver — seuil non prévu
+            return;
+        }
+
+        await SaveAndSendAsync(ticket.Id, client.Phone, message);
+    }
+
     // Notification quand le ticket est appelé
     public async Task SendTicketCalledAsync(Ticket ticket)
     {

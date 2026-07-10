@@ -34,3 +34,30 @@ public class TicketResponseDto
     public DateTime? StartedAt { get; set; }
     public DateTime? EndedAt { get; set; }
 }
+
+public class TicketPositionDto
+{
+    // Position actuelle dans la file (ex: 3)
+    public int Position { get; set; }
+
+    // Nombre de personnes avant le client
+    public int PeopleAhead { get; set; }
+
+    // Temps d'attente recalculé en minutes
+    public int EstimatedWaitTime { get; set; }
+
+    // Statut actuel du ticket
+    public string Status { get; set; } = string.Empty;
+
+    // Numéro de guichet si ticket déjà appelé
+    public int? CounterNumber { get; set; }
+}
+
+public class TicketUpdateClientDto
+{
+    // Nouveau numéro de téléphone WhatsApp
+    public string Phone { get; set; } = string.Empty;
+
+    // Nouvel email (optionnel)
+    public string? Email { get; set; }
+}

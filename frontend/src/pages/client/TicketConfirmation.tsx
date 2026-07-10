@@ -12,6 +12,7 @@ import {
   Phone,
   Bell,
   AlertCircle,
+  Eye,
 } from "lucide-react";
 import { ticketService } from "../../services/ticketService";
 import type { Ticket } from "../../@types";
@@ -34,76 +35,77 @@ export default function TicketConfirmation() {
 
   // Charger le ticket si accès direct par URL
   useEffect(() => {
-  if (!ticket && ticketId) {
-    ticketService.getById(Number(ticketId))
-      .then((t) => {
-        setTicket(t);
-        // Sauvegarder le ticket actif
-        localStorage.setItem('qora_active_ticket', JSON.stringify(t));
-      })
-      .catch(() => setError('Ticket introuvable.'))
-      .finally(() => setLoading(false));
-  } else if (ticket) {
-    // Ticket passé via state — on le sauvegarde aussi
-    localStorage.setItem('qora_active_ticket', JSON.stringify(ticket));
-  }
-}, [ticketId, ticket]);
+    if (!ticket && ticketId) {
+      ticketService
+        .getById(Number(ticketId))
+        .then((t) => {
+          setTicket(t);
+          // Sauvegarder le ticket actif
+          localStorage.setItem("qora_active_ticket", JSON.stringify(t));
+        })
+        .catch(() => setError("Ticket introuvable."))
+        .finally(() => setLoading(false));
+    } else if (ticket) {
+      // Ticket passé via state — on le sauvegarde aussi
+      localStorage.setItem("qora_active_ticket", JSON.stringify(ticket));
+    }
+  }, [ticketId, ticket]);
 
   // Connexion SignalR — écoute l'appel du ticket
   useEffect(() => {
-  if (!ticket) return;
+    if (!ticket) return;
 
-  let stopped = false;
+    let stopped = false;
 
-  const connection = new signalR.HubConnectionBuilder()
-    .withUrl('http://localhost:5180/hubs/queue')
-    .withAutomaticReconnect()
-    .configureLogging(signalR.LogLevel.Warning)
-    .build();
+    const connection = new signalR.HubConnectionBuilder()
+      .withUrl("http://localhost:5180/hubs/queue")
+      .withAutomaticReconnect()
+      .configureLogging(signalR.LogLevel.Warning)
+      .build();
 
-  connection.on('TicketCalled', (calledTicket: Ticket) => {
-    if (calledTicket.ticketNumber === ticket.ticketNumber) {
-      setIsCalled(true);
-      setCalledCounter(calledTicket.counterNumber ?? null);
-      localStorage.removeItem('qora_active_ticket');
+    connection.on("TicketCalled", (calledTicket: Ticket) => {
+      if (calledTicket.ticketNumber === ticket.ticketNumber) {
+        setIsCalled(true);
+        setCalledCounter(calledTicket.counterNumber ?? null);
+        localStorage.removeItem("qora_active_ticket");
 
-      if (Notification.permission === 'granted') {
-        new Notification("🔔 C'est votre tour !", {
-          body: `Présentez-vous au guichet ${calledTicket.counterNumber}. Ticket : ${calledTicket.ticketNumber}`,
-          icon: '/favicon.ico',
-        });
+        if (Notification.permission === "granted") {
+          new Notification("🔔 C'est votre tour !", {
+            body: `Présentez-vous au guichet ${calledTicket.counterNumber}. Ticket : ${calledTicket.ticketNumber}`,
+            icon: "/favicon.ico",
+          });
+        }
       }
+    });
+
+    const start = async () => {
+      try {
+        await connection.start();
+        if (stopped) {
+          await connection.stop();
+          return;
+        }
+        setSignalRConnected(true);
+        await connection.invoke("JoinGroup", `agency-1`);
+      } catch (err) {
+        if (!stopped) {
+          console.warn("SignalR — connexion échouée :", err);
+          setSignalRConnected(false);
+        }
+      }
+    };
+
+    start();
+
+    if (Notification.permission === "default") {
+      Notification.requestPermission();
     }
-  });
 
-  const start = async () => {
-    try {
-      await connection.start();
-      if (stopped) {
-        await connection.stop();
-        return;
-      }
-      setSignalRConnected(true);
-      await connection.invoke('JoinGroup', `agency-1`);
-    } catch (err) {
-      if (!stopped) {
-        console.warn('SignalR — connexion échouée :', err);
-        setSignalRConnected(false);
-      }
-    }
-  };
-
-  start();
-
-  if (Notification.permission === 'default') {
-    Notification.requestPermission();
-  }
-
-  return () => {
-    stopped = true;
-    connection.stop();
-  };
-}, [ticket?.ticketNumber, ticket]);
+    return () => {
+      stopped = true;
+      connection.stop();
+    };
+  }, [ticket?.ticketNumber, ticket]);
 
   if (loading) {
     return (
@@ -541,6 +543,20 @@ export default function TicketConfirmation() {
           >
             <Home size={16} />
             Nouveau ticket
+          </button>
+          <button
+            onClick={() =>
+              navigate(`/ticket/suivi/${ticketId}`, { state: { ticket } })
+            }
+            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm transition-all border-2"
+            style={{
+              borderColor: "var(--color-primary)",
+              color: "var(--color-primary)",
+              backgroundColor: "transparent",
+            }}
+          >
+            <Eye size={16} />
+            Suivre mon ticket
           </button>
         </div>
       </main>

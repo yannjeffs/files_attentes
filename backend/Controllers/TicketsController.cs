@@ -15,7 +15,7 @@ public class TicketsController : ControllerBase
     private readonly AppDbContext _context;
     private readonly QueueService _queueService;
     private readonly QueueNotificationService _notificationService;
-    private readonly WhatsAppService _whatsAppservice;
+    private readonly WhatsAppService _whatsAppService;
 
     public TicketsController(
         AppDbContext context,
@@ -26,7 +26,7 @@ public class TicketsController : ControllerBase
         _context = context;
         _queueService = queueService;
         _notificationService = notificationService;
-        _whatsAppservice = whatsAppService;
+        _whatsAppService = whatsAppService;
     }
 
     // POST api/tickets
@@ -85,7 +85,7 @@ public class TicketsController : ControllerBase
         await _notificationService.NotifyTicketCreatedAsync(service.AgencyId, ticketDto);
 
         // WhatsApp - confirmation immédiate
-        await _whatsAppservice.SendTicketConfirmationAsync(ticket);
+        await _whatsAppService.SendTicketConfirmationAsync(ticket);
 
         return CreatedAtAction(nameof(GetById), new { id = ticket.Id }, ticketDto);
     }
@@ -108,8 +108,8 @@ public class TicketsController : ControllerBase
         if (ticket.Status != TicketStatus.Waiting)
             return BadRequest(new { message = "Ce ticket n'est pas en attente." });
 
-        var agentId = int.Parse(User.FindFirst(
-            System.Security.Claims.ClaimTypes.NameIdentifier)!.Value);
+        var agentId = int.Parse(
+            User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)!.Value);
 
         ticket.Status = TicketStatus.Called;
         ticket.CalledAt = DateTime.UtcNow;
@@ -120,11 +120,48 @@ public class TicketsController : ControllerBase
 
         var ticketDto = MapToResponseDto(ticket);
 
-        // Notifier via SignalR
-        await _notificationService.NotifyTicketCalledAsync(ticket.Service.AgencyId, ticketDto);
+        // 1. Notifier via SignalR tous les écrans connectés
+        await _notificationService.NotifyTicketCalledAsync(
+            ticket.Service.AgencyId, ticketDto);
 
-        // WhatsApp - Notification d'appel
-        await _whatsAppservice.SendTicketConfirmationAsync(ticket);
+        // 2. Notifier le client appelé sur WhatsApp
+        await _whatsAppService.SendTicketCalledAsync(ticket);
+
+        // 3. Récupérer tous les tickets encore en attente
+        //    dans le même service
+        var waitingTickets = await _context.Tickets
+            .Where(t =>
+                t.ServiceId == ticket.ServiceId &&
+                t.Status == TicketStatus.Waiting)
+            .ToListAsync();
+
+        // 4. Pour chaque ticket en attente, recalculer sa position
+        //    et envoyer une notification WhatsApp si un seuil est atteint
+        //
+        //    On définit les seuils : 5, 3, 1
+        //    Si la nouvelle position correspond à un seuil → on notifie
+        var seuils = new[] { 5, 3, 1 };
+
+        foreach (var waitingTicket in waitingTickets)
+        {
+            // Calculer combien de personnes sont encore avant ce ticket
+            var peopleAhead = await _queueService.GetPositionAsync(waitingTicket.Id);
+
+            // Vérifier si la nouvelle position correspond à un seuil
+            if (seuils.Contains(peopleAhead))
+            {
+                // Envoyer la notification WhatsApp de progression
+                await _whatsAppService.SendPositionUpdateAsync(
+                    waitingTicket, peopleAhead);
+            }
+
+            // Notifier aussi via SignalR pour mettre à jour
+            // la position sur la page de suivi web du client
+            await _notificationService.NotifyPositionUpdatedAsync(
+                ticket.Service.AgencyId,
+                waitingTicket.Id,
+                peopleAhead);
+        }
 
         return Ok(ticketDto);
     }
@@ -304,6 +341,140 @@ public class TicketsController : ControllerBase
 
         if (ticket == null)
             return NotFound(new { message = "Ticket introuvable." });
+
+        return Ok(MapToResponseDto(ticket));
+    }
+
+    // GET api/tickets/{id}/position — Public
+    [HttpGet("{id}/position")]
+    public async Task<IActionResult> GetPosition(int id)
+    {
+        // 1. On cherche le ticket demandé
+        var ticket = await _context.Tickets
+            .Include(t => t.Counter)
+            .FirstOrDefaultAsync(t => t.Id == id);
+
+        if (ticket == null)
+            return NotFound(new { message = "Ticket introuvable." });
+
+        // 2. Si le ticket est déjà terminé, on retourne son statut final
+        //    sans calculer de position — il n'est plus dans la file
+        if (ticket.Status == TicketStatus.Done ||
+            ticket.Status == TicketStatus.Cancelled ||
+            ticket.Status == TicketStatus.NoShow ||
+            ticket.Status == TicketStatus.Transferred)
+        {
+            return Ok(new TicketPositionDto
+            {
+                Position = 0,
+                PeopleAhead = 0,
+                EstimatedWaitTime = 0,
+                Status = ticket.Status.ToString(),
+                CounterNumber = ticket.Counter?.Number
+            });
+        }
+
+        // 3. Si le ticket est appelé (CALLED), c'est le tour du client
+        if (ticket.Status == TicketStatus.Called ||
+            ticket.Status == TicketStatus.InProgress)
+        {
+            return Ok(new TicketPositionDto
+            {
+                Position = 0,
+                PeopleAhead = 0,
+                EstimatedWaitTime = 0,
+                Status = ticket.Status.ToString(),
+                CounterNumber = ticket.Counter?.Number
+            });
+        }
+
+        // 4. On compte le nombre de tickets WAITING créés AVANT le nôtre
+        //    dans le même service
+        //
+        //    Pourquoi "IssuedAt < ticket.IssuedAt" ?
+        //    Parce qu'on veut les tickets arrivés avant nous dans la file.
+        //    On exclut les tickets VIP si notre ticket est Normal
+        //    (les VIP passeront avant nous)
+        var peopleAhead = await _context.Tickets
+            .Where(t =>
+                t.ServiceId == ticket.ServiceId &&    // même service
+                t.Status == TicketStatus.Waiting &&   // encore en attente
+                t.Id != ticket.Id &&                  // pas nous-même
+                (
+                    // Un ticket VIP passe toujours avant un ticket Normal
+                    (ticket.Priority == TicketPriority.Normal &&
+                     t.Priority == TicketPriority.VIP) ||
+                    // À priorité égale, c'est l'ordre d'arrivée qui compte
+                    (t.Priority == ticket.Priority &&
+                     t.IssuedAt < ticket.IssuedAt)
+                )
+            )
+            .CountAsync();
+
+        // 5. La position dans la file = nombre de personnes avant + 1
+        //    Ex: 2 personnes avant → tu es en position 3
+        var position = peopleAhead + 1;
+
+        // 6. On estime le temps d'attente : 5 minutes par personne en attente
+        //    C'est une estimation simple — en production on pourrait
+        //    utiliser la moyenne des temps de traitement réels
+        var estimatedWait = peopleAhead * 5;
+
+        return Ok(new TicketPositionDto
+        {
+            Position = position,
+            PeopleAhead = peopleAhead,
+            EstimatedWaitTime = estimatedWait,
+            Status = ticket.Status.ToString(),
+            CounterNumber = null
+        });
+    }
+
+    // PUT api/tickets/{id}/update-client — Public
+    [HttpPut("{id}/update-client")]
+    public async Task<IActionResult> UpdateClient(
+        int id,
+        [FromBody] TicketUpdateClientDto dto)
+    {
+        // 1. On charge le ticket avec son client associé
+        var ticket = await _context.Tickets
+            .Include(t => t.Client)
+            .Include(t => t.Service)
+            .FirstOrDefaultAsync(t => t.Id == id);
+
+        if (ticket == null)
+            return NotFound(new { message = "Ticket introuvable." });
+
+        // 2. On vérifie que le ticket est encore modifiable
+        //    Un ticket ne peut être modifié que s'il est encore en attente
+        //    Une fois appelé, en cours ou terminé — on ne peut plus modifier
+        if (ticket.Status != TicketStatus.Waiting)
+            return BadRequest(new
+            {
+                message = "Ce ticket ne peut plus être modifié — " +
+                          "il n'est plus en attente."
+            });
+
+        // 3. On vérifie que le client existe bien
+        //    (normalement oui, mais on vérifie par sécurité)
+        if (ticket.Client == null)
+            return BadRequest(new { message = "Client introuvable." });
+
+        // 4. On met à jour uniquement les champs de contact
+        //    On garde l'ancien téléphone si le nouveau est vide
+        if (!string.IsNullOrWhiteSpace(dto.Phone))
+            ticket.Client.Phone = dto.Phone.Trim();
+
+        // Email : on accepte null ou vide (suppression de l'email)
+        ticket.Client.Email = string.IsNullOrWhiteSpace(dto.Email)
+            ? null
+            : dto.Email.Trim();
+
+        // 5. On sauvegarde les modifications
+        await _context.SaveChangesAsync();
+
+        // 6. On retourne le ticket mis à jour
+        await _context.Entry(ticket).Reference(t => t.Service).LoadAsync();
 
         return Ok(MapToResponseDto(ticket));
     }

@@ -39,6 +39,35 @@ public class QueueService
         return waitingTickets * 5;
     }
 
+    // Calcule la position d'un ticket dans sa file
+    // Retourne le nombre de personnes avant le ticket donné
+    public async Task<int> GetPositionAsync(int ticketId)
+    {
+        // On charge le ticket
+        var ticket = await _context.Tickets
+            .FirstOrDefaultAsync(t => t.Id == ticketId);
+
+        if (ticket == null) return 0;
+
+        // On compte les tickets qui passent avant lui
+        // selon les règles de priorité et d'ordre d'arrivée
+        var peopleAhead = await _context.Tickets
+            .Where(t =>
+                t.ServiceId == ticket.ServiceId &&
+                t.Status == TicketStatus.Waiting &&
+                t.Id != ticket.Id &&
+                (
+                    (ticket.Priority == TicketPriority.Normal &&
+                     t.Priority == TicketPriority.VIP) ||
+                    (t.Priority == ticket.Priority &&
+                     t.IssuedAt < ticket.IssuedAt)
+                )
+            )
+            .CountAsync();
+
+        return peopleAhead;
+    }
+
     // Récupère le prochain ticket en attente pour un service donné
     public async Task<Ticket?> GetNextTicketAsync(int serviceId)
     {

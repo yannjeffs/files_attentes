@@ -94,3 +94,25 @@ export interface DashboardStats {
     averageWaitTime: number;
     averageServiceTime: number;
 }
+
+// Position d'un ticket dans la file
+export interface TicketPosition {
+  position: number;
+  peopleAhead: number;
+  estimatedWaitTime: number;
+  status: TicketStatus;
+  counterNumber?: number;
+}
+
+// Mise à jour de la position via SignalR
+export interface PositionUpdate {
+  ticketId: number;
+  peopleAhead: number;
+  estimatedWaitTime: number;
+}
+
+// Modification des infos client
+export interface TicketUpdateClientRequest {
+  phone: string;
+  email?: string;
+}

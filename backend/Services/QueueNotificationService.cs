@@ -1,6 +1,5 @@
 using backend.DTOs;
 using backend.Hubs;
-using backend.Models;
 using Microsoft.AspNetCore.SignalR;
 
 namespace backend.Services;
@@ -60,5 +59,23 @@ public class QueueNotificationService
         await _hubContext.Clients
             .Group($"agency-{agencyId}")
             .SendAsync("TicketTransferred", ticket);
+    }
+
+    // Notifie la mise à jour de position d'un ticket spécifique
+    // Tous les clients connectés sur la page de suivi verront
+    // leur position se mettre à jour automatiquement
+    public async Task NotifyPositionUpdatedAsync(
+        int agencyId,
+        int ticketId,
+        int peopleAhead)
+    {
+        await _hubContext.Clients
+            .Group($"agency-{agencyId}")
+            .SendAsync("PositionUpdated", new
+            {
+                ticketId,      // pour identifier quel ticket est concerné
+                peopleAhead,   // nouveau nombre de personnes avant
+                estimatedWaitTime = peopleAhead * 5  // temps estimé mis à jour
+            });
     }
 }

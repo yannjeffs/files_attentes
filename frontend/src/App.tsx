@@ -9,6 +9,7 @@ import TicketConfirmation from './pages/client/TicketConfirmation';
 import AgentDashboard from './pages/agent/AgentDashboard';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import QueueDisplay from './pages/display/QueueDisplay';
+import TicketTracking from './pages/client/TicketTracking';
 
 // Guard routes protégées
 const ProtectedRoute = ({
@@ -37,6 +38,7 @@ function App() {
         <Route path="/ticket/confirmation/:ticketId" element={<TicketConfirmation />} />
         <Route path="/display" element={<QueueDisplay />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/ticket/suivi/:ticketId" element={<TicketTracking />} />
 
         {/* Agent */}
         <Route
