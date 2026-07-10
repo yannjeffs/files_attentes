@@ -1,0 +1,8 @@
+# .NET
+backend/bin/
+backend/obj/
+**/bin/
+**/obj/
+*.user
+appsettings.Development.json
+appsettings.Local.json
