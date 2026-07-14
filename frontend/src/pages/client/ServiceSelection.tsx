@@ -46,12 +46,8 @@ export default function ServiceSelection() {
     fetchServices();
   }, []);
 
-  const {
-  activeTicket,
-  isCalled,
-  calledCounter,
-  clearActiveTicket
-} = useActiveTicket();
+  const { activeTicket, isCalled, calledCounter, clearActiveTicket } =
+    useActiveTicket();
 
   const handleSelectService = (service: Service) => {
     navigate(`/ticket/form/${service.id}`, { state: { service } });
@@ -72,12 +68,35 @@ export default function ServiceSelection() {
             className="w-9 h-9 rounded-xl flex items-center justify-center"
             style={{ backgroundColor: "var(--color-primary)" }}
           >
-            <svg width="20" height="20" viewBox="0 0 52 52" fill="none">
-              <circle cx="26" cy="22" r="12" stroke="white" strokeWidth="3" />
-              <circle cx="26" cy="22" r="5" fill="white" />
-              <circle cx="14" cy="38" r="3" fill="white" opacity="0.7" />
-              <circle cx="26" cy="42" r="3" fill="white" opacity="0.9" />
-              <circle cx="38" cy="38" r="3" fill="white" opacity="0.7" />
+            <svg
+              width="32"
+              height="32"
+              viewBox="0 0 52 52"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <rect width="52" height="52" rx="14" fill="#378ADD" />
+              <circle
+                cx="26"
+                cy="24"
+                r="10"
+                stroke="white"
+                stroke-width="2.5"
+                fill="none"
+              />
+              <circle cx="26" cy="24" r="4" fill="white" />
+              <line
+                x1="33"
+                y1="31"
+                x2="40"
+                y2="38"
+                stroke="white"
+                stroke-width="2.5"
+                stroke-linecap="round"
+              />
+              <circle cx="14" cy="38" r="2.5" fill="white" opacity="0.5" />
+              <circle cx="20" cy="38" r="2.5" fill="white" opacity="0.7" />
+              <circle cx="26" cy="38" r="2.5" fill="white" />
             </svg>
           </div>
           <div>

@@ -1,31 +1,53 @@
-import { useEffect, useState, useRef } from 'react';
-import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import * as signalR from '@microsoft/signalr';
+import { useEffect, useState, useRef } from "react";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
+import * as signalR from "@microsoft/signalr";
 import {
-  CheckCircle, Clock, Users, Bell, Phone,
-  Home, Landmark, AlertCircle, Pencil, X,
-  Wifi, WifiOff, Trash2
-} from 'lucide-react';
-import { Button } from '../../components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
-import { Badge } from '../../components/ui/badge';
-import { ScrollArea } from '../../components/ui/scroll-area';
+  CheckCircle,
+  Clock,
+  Users,
+  Bell,
+  Phone,
+  Home,
+  Landmark,
+  AlertCircle,
+  Pencil,
+  X,
+  Wifi,
+  WifiOff,
+  Trash2,
+  Star,
+} from "lucide-react";
+import { Button } from "../../components/ui/button";
 import {
-  Dialog, DialogContent, DialogHeader,
-  DialogTitle, DialogFooter
-} from '../../components/ui/dialog';
-import { ticketService } from '../../services/ticketService';
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../../components/ui/card";
+import { Badge } from "../../components/ui/badge";
+import { ScrollArea } from "../../components/ui/scroll-area";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "../../components/ui/dialog";
+import { ticketService } from "../../services/ticketService";
 import type {
-  Ticket, TicketPosition, PositionUpdate,
-  TicketUpdateClientRequest
-} from '../../@types';
+  Ticket,
+  TicketPosition,
+  PositionUpdate,
+  TicketUpdateClientRequest,
+} from "../../@types";
+import { ratingService } from "../../services/ratingService";
 
 // ── Types locaux ──────────────────────────────────────────────────────────────
 
 // Une notification affichée sur la page
 interface TrackingNotification {
   id: string;
-  type: 'info' | 'warning' | 'success' | 'error';
+  type: "info" | "warning" | "success" | "error";
   message: string;
   time: string;
 }
@@ -36,7 +58,7 @@ interface TimelineStep {
   label: string;
   description: string;
   time?: string;
-  status: 'done' | 'active' | 'pending';
+  status: "done" | "active" | "pending";
   icon: React.ReactNode;
 }
 
@@ -44,9 +66,9 @@ interface TimelineStep {
 
 // Formater l'heure courante
 const now = () =>
-  new Date().toLocaleTimeString('fr-FR', {
-    hour: '2-digit',
-    minute: '2-digit',
+  new Date().toLocaleTimeString("fr-FR", {
+    hour: "2-digit",
+    minute: "2-digit",
   });
 
 // ── Composant principal ───────────────────────────────────────────────────────
@@ -57,21 +79,24 @@ export default function TicketTracking() {
 
   // ── États principaux ───────────────────────────────────────────────────────
   const [ticket, setTicket] = useState<Ticket | null>(
-    location.state?.ticket ?? null
+    location.state?.ticket ?? null,
   );
   const [position, setPosition] = useState<TicketPosition | null>(null);
   const [loading, setLoading] = useState(!location.state?.ticket);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [connected, setConnected] = useState(false);
+  const [alreadyRated, setAlreadyRated] = useState(false);
 
   // Notifications reçues sur cette page
-  const [notifications, setNotifications] = useState<TrackingNotification[]>([]);
+  const [notifications, setNotifications] = useState<TrackingNotification[]>(
+    [],
+  );
 
   // Modal modification infos
   const [editOpen, setEditOpen] = useState(false);
-  const [editForm, setEditForm] = useState({ phone: '', email: '' });
+  const [editForm, setEditForm] = useState({ phone: "", email: "" });
   const [editLoading, setEditLoading] = useState(false);
-  const [editError, setEditError] = useState('');
+  const [editError, setEditError] = useState("");
 
   // Modal annulation
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -83,7 +108,7 @@ export default function TicketTracking() {
   // ── Ajouter une notification à la liste ───────────────────────────────────
   const addNotification = (
     message: string,
-    type: TrackingNotification['type'] = 'info'
+    type: TrackingNotification["type"] = "info",
   ) => {
     const notif: TrackingNotification = {
       id: crypto.randomUUID(),
@@ -103,7 +128,7 @@ export default function TicketTracking() {
       try {
         // Si on a le ticket via state React Router, on l'utilise directement
         // Sinon on le charge depuis l'API
-        const t = ticket ?? await ticketService.getById(Number(ticketId));
+        const t = ticket ?? (await ticketService.getById(Number(ticketId)));
         setTicket(t);
 
         // Charger la position initiale depuis l'API
@@ -112,11 +137,11 @@ export default function TicketTracking() {
 
         // Pré-remplir le formulaire d'édition
         setEditForm({
-          phone: t.clientPhone ?? '',
-          email: '',
+          phone: t.clientPhone ?? "",
+          email: "",
         });
       } catch {
-        setError('Impossible de charger les informations du ticket.');
+        setError("Impossible de charger les informations du ticket.");
       } finally {
         setLoading(false);
       }
@@ -131,7 +156,7 @@ export default function TicketTracking() {
     if (connectionRef.current) return;
 
     const connection = new signalR.HubConnectionBuilder()
-      .withUrl('http://localhost:5180/hubs/queue')
+      .withUrl("http://localhost:5180/hubs/queue")
       .withAutomaticReconnect()
       .configureLogging(signalR.LogLevel.Warning)
       .build();
@@ -144,7 +169,7 @@ export default function TicketTracking() {
     // - ticketId : l'id du ticket dont la position a changé
     // - peopleAhead : nouveau nombre de personnes avant lui
     // - estimatedWaitTime : nouveau temps estimé
-    connection.on('PositionUpdated', (update: PositionUpdate) => {
+    connection.on("PositionUpdated", (update: PositionUpdate) => {
       // On vérifie que c'est bien notre ticket qui est concerné
       if (update.ticketId !== Number(ticketId)) return;
 
@@ -156,101 +181,114 @@ export default function TicketTracking() {
               peopleAhead: update.peopleAhead,
               estimatedWaitTime: update.estimatedWaitTime,
             }
-          : prev
+          : prev,
       );
 
       // Ajouter une notification selon la position
       if (update.peopleAhead === 1) {
         addNotification(
           "⚡ Vous êtes le suivant ! Préparez-vous à vous présenter au guichet.",
-          'warning'
+          "warning",
         );
       } else if (update.peopleAhead === 3) {
         addNotification(
           `⏳ Plus que 3 personnes avant vous (~${update.estimatedWaitTime} min).`,
-          'info'
+          "info",
         );
       } else if (update.peopleAhead === 5) {
         addNotification(
           `📊 Plus que 5 personnes avant vous (~${update.estimatedWaitTime} min).`,
-          'info'
+          "info",
         );
       } else {
         addNotification(
           `📊 Position mise à jour : ${update.peopleAhead} personne(s) avant vous.`,
-          'info'
+          "info",
         );
       }
     });
 
     // ── Événement : ticket appelé ─────────────────────────────────────────
     // Déclenché quand c'est notre tour
-    connection.on('TicketCalled', (calledTicket: Ticket) => {
+    connection.on("TicketCalled", (calledTicket: Ticket) => {
       if (calledTicket.ticketNumber !== ticket.ticketNumber) return;
 
       // Mettre à jour le ticket et la position
       setTicket(calledTicket);
       setPosition((prev) =>
         prev
-          ? { ...prev, peopleAhead: 0, estimatedWaitTime: 0,
-              status: 'Called', counterNumber: calledTicket.counterNumber }
-          : prev
+          ? {
+              ...prev,
+              peopleAhead: 0,
+              estimatedWaitTime: 0,
+              status: "Called",
+              counterNumber: calledTicket.counterNumber,
+            }
+          : prev,
       );
 
       // Notification importante
       addNotification(
         `🔔 C'est votre tour ! Présentez-vous au guichet ${calledTicket.counterNumber}.`,
-        'success'
+        "success",
       );
 
       // Notification navigateur si permission accordée
-      if (Notification.permission === 'granted') {
+      if (Notification.permission === "granted") {
         new Notification("🔔 C'est votre tour !", {
           body: `Guichet ${calledTicket.counterNumber} — Ticket ${calledTicket.ticketNumber}`,
-          icon: '/favicon.ico',
+          icon: "/favicon.ico",
         });
       }
 
       // Supprimer le ticket actif du localStorage
-      localStorage.removeItem('qora_active_ticket');
+      localStorage.removeItem("qora_active_ticket");
     });
 
     // ── Événement : ticket démarré ────────────────────────────────────────
-    connection.on('TicketStarted', (startedTicket: Ticket) => {
+    connection.on("TicketStarted", (startedTicket: Ticket) => {
       if (startedTicket.ticketNumber !== ticket.ticketNumber) return;
       setTicket(startedTicket);
       addNotification(
-        '✅ Votre traitement a démarré. L\'agent s\'occupe de vous.',
-        'success'
+        "✅ Votre traitement a démarré. L'agent s'occupe de vous.",
+        "success",
       );
     });
 
     // ── Événement : ticket terminé ────────────────────────────────────────
-    connection.on('TicketCompleted', (completedTicket: Ticket) => {
+    // Dans le useEffect SignalR, quand TicketCompleted est reçu :
+    connection.on("TicketCompleted", async (completedTicket: Ticket) => {
       if (completedTicket.ticketNumber !== ticket.ticketNumber) return;
       setTicket(completedTicket);
       addNotification(
-        '✅ Votre ticket a été traité avec succès. Merci de votre visite !',
-        'success'
+        "✅ Votre ticket a été traité avec succès. Merci de votre visite !",
+        "success",
       );
+      // Vérifier si déjà noté
+      const existing = await ratingService.getByTicket(Number(ticketId));
+      setAlreadyRated(!!existing);
     });
 
     // Démarrer la connexion et rejoindre le groupe de l'agence
-    connection.start()
+    connection
+      .start()
       .then(async () => {
         setConnected(true);
-        await connection.invoke('JoinGroup', `agency-1`);
+        await connection.invoke("JoinGroup", `agency-1`);
       })
       .catch(() => setConnected(false));
 
     connection.onreconnected(() => {
       setConnected(true);
-      addNotification('🔌 Reconnexion établie — suivi temps réel actif.', 'info');
+      addNotification(
+        "🔌 Reconnexion établie — suivi temps réel actif.",
+        "info",
+      );
     });
 
     connection.onreconnecting(() => setConnected(false));
 
-    if (Notification.permission === 'default') {
+    if (Notification.permission === "default") {
       Notification.requestPermission();
     }
 
@@ -266,12 +304,12 @@ export default function TicketTracking() {
     setCancelLoading(true);
     try {
       await ticketService.cancel(Number(ticketId));
-      localStorage.removeItem('qora_active_ticket');
-      navigate('/');
+      localStorage.removeItem("qora_active_ticket");
+      navigate("/");
     } catch {
       addNotification(
-        'Impossible d\'annuler ce ticket. Veuillez réessayer.',
-        'error'
+        "Impossible d'annuler ce ticket. Veuillez réessayer.",
+        "error",
       );
     } finally {
       setCancelLoading(false);
@@ -283,28 +321,25 @@ export default function TicketTracking() {
   const handleEdit = async () => {
     if (!ticketId) return;
     if (!editForm.phone.trim()) {
-      setEditError('Le numéro de téléphone est obligatoire.');
+      setEditError("Le numéro de téléphone est obligatoire.");
       return;
     }
 
     setEditLoading(true);
-    setEditError('');
+    setEditError("");
     try {
-      const updated = await ticketService.updateClient(
-        Number(ticketId),
-        {
-          phone: editForm.phone.trim(),
-          email: editForm.email.trim() || undefined,
-        } as TicketUpdateClientRequest
-      );
+      const updated = await ticketService.updateClient(Number(ticketId), {
+        phone: editForm.phone.trim(),
+        email: editForm.email.trim() || undefined,
+      } as TicketUpdateClientRequest);
       setTicket(updated);
       setEditOpen(false);
       addNotification(
-        '✅ Vos informations de contact ont été mises à jour.',
-        'success'
+        "✅ Vos informations de contact ont été mises à jour.",
+        "success",
       );
     } catch {
-      setEditError('Impossible de mettre à jour vos informations.');
+      setEditError("Impossible de mettre à jour vos informations.");
     } finally {
       setEditLoading(false);
     }
@@ -321,111 +356,110 @@ export default function TicketTracking() {
 
     return [
       {
-        id: 'created',
-        label: 'Ticket créé',
-        description: 'Votre ticket a été enregistré dans la file d\'attente.',
+        id: "created",
+        label: "Ticket créé",
+        description: "Votre ticket a été enregistré dans la file d'attente.",
         // L'heure de création du ticket
         time: ticket.issuedAt
-          ? new Date(ticket.issuedAt).toLocaleTimeString('fr-FR', {
-              hour: '2-digit', minute: '2-digit',
+          ? new Date(ticket.issuedAt).toLocaleTimeString("fr-FR", {
+              hour: "2-digit",
+              minute: "2-digit",
             })
           : undefined,
         // L'étape "créé" est toujours terminée
-        status: 'done',
+        status: "done",
         icon: <CheckCircle size={16} />,
       },
       {
-        id: 'waiting',
-        label: 'En attente',
+        id: "waiting",
+        label: "En attente",
         description: position
           ? `${position.peopleAhead} personne(s) avant vous — attente estimée : ${position.estimatedWaitTime} min`
-          : 'En attente dans la file...',
+          : "En attente dans la file...",
         status:
-          s === 'Waiting'
-            ? 'active'  // c'est l'étape en cours
-            : s === 'Called' || s === 'InProgress' || s === 'Done'
-            ? 'done'    // déjà passée
-            : 'pending',
+          s === "Waiting"
+            ? "active" // c'est l'étape en cours
+            : s === "Called" || s === "InProgress" || s === "Done"
+              ? "done" // déjà passée
+              : "pending",
         icon: <Clock size={16} />,
       },
       {
-        id: 'called',
-        label: 'Appelé au guichet',
-        description:
-          position?.counterNumber
-            ? `Présentez-vous au guichet ${position.counterNumber}`
-            : 'En attente d\'appel...',
+        id: "called",
+        label: "Appelé au guichet",
+        description: position?.counterNumber
+          ? `Présentez-vous au guichet ${position.counterNumber}`
+          : "En attente d'appel...",
         time: ticket.calledAt
-          ? new Date(ticket.calledAt).toLocaleTimeString('fr-FR', {
-              hour: '2-digit', minute: '2-digit',
+          ? new Date(ticket.calledAt).toLocaleTimeString("fr-FR", {
+              hour: "2-digit",
+              minute: "2-digit",
             })
           : undefined,
         status:
-          s === 'Called'
-            ? 'active'
-            : s === 'InProgress' || s === 'Done'
-            ? 'done'
-            : 'pending',
+          s === "Called"
+            ? "active"
+            : s === "InProgress" || s === "Done"
+              ? "done"
+              : "pending",
         icon: <Bell size={16} />,
       },
       {
-        id: 'inprogress',
-        label: 'En cours de traitement',
-        description: 'L\'agent traite votre demande au guichet.',
+        id: "inprogress",
+        label: "En cours de traitement",
+        description: "L'agent traite votre demande au guichet.",
         time: ticket.startedAt
-          ? new Date(ticket.startedAt).toLocaleTimeString('fr-FR', {
-              hour: '2-digit', minute: '2-digit',
+          ? new Date(ticket.startedAt).toLocaleTimeString("fr-FR", {
+              hour: "2-digit",
+              minute: "2-digit",
             })
           : undefined,
         status:
-          s === 'InProgress'
-            ? 'active'
-            : s === 'Done'
-            ? 'done'
-            : 'pending',
+          s === "InProgress" ? "active" : s === "Done" ? "done" : "pending",
         icon: <Users size={16} />,
       },
       {
-        id: 'done',
-        label: 'Service rendu',
-        description: 'Votre demande a été traitée avec succès.',
+        id: "done",
+        label: "Service rendu",
+        description: "Votre demande a été traitée avec succès.",
         time: ticket.endedAt
-          ? new Date(ticket.endedAt).toLocaleTimeString('fr-FR', {
-              hour: '2-digit', minute: '2-digit',
+          ? new Date(ticket.endedAt).toLocaleTimeString("fr-FR", {
+              hour: "2-digit",
+              minute: "2-digit",
             })
           : undefined,
-        status: s === 'Done' ? 'done' : 'pending',
+        status: s === "Done" ? "done" : "pending",
         icon: <CheckCircle size={16} />,
       },
     ];
   };
 
   // ── Couleur des notifications ─────────────────────────────────────────────
-  const notifStyle = (type: TrackingNotification['type']) => {
+  const notifStyle = (type: TrackingNotification["type"]) => {
     switch (type) {
-      case 'success':
+      case "success":
         return {
-          bg: 'rgba(39,174,96,0.08)',
-          border: 'rgba(39,174,96,0.2)',
-          color: 'var(--color-success)',
+          bg: "rgba(39,174,96,0.08)",
+          border: "rgba(39,174,96,0.2)",
+          color: "var(--color-success)",
         };
-      case 'warning':
+      case "warning":
         return {
-          bg: 'rgba(242,153,74,0.08)',
-          border: 'rgba(242,153,74,0.2)',
-          color: 'var(--color-warning)',
+          bg: "rgba(242,153,74,0.08)",
+          border: "rgba(242,153,74,0.2)",
+          color: "var(--color-warning)",
         };
-      case 'error':
+      case "error":
         return {
-          bg: 'rgba(235,87,87,0.08)',
-          border: 'rgba(235,87,87,0.2)',
-          color: 'var(--color-danger)',
+          bg: "rgba(235,87,87,0.08)",
+          border: "rgba(235,87,87,0.2)",
+          color: "var(--color-danger)",
         };
       default:
         return {
-          bg: 'rgba(74,158,232,0.08)',
-          border: 'rgba(74,158,232,0.2)',
-          color: 'var(--color-primary)',
+          bg: "rgba(74,158,232,0.08)",
+          border: "rgba(74,158,232,0.2)",
+          color: "var(--color-primary)",
         };
     }
   };
@@ -435,17 +469,17 @@ export default function TicketTracking() {
     return (
       <div
         className="min-h-screen flex items-center justify-center"
-        style={{ backgroundColor: 'var(--color-bg)' }}
+        style={{ backgroundColor: "var(--color-bg)" }}
       >
         <div className="flex flex-col items-center gap-4">
           <div
             className="w-10 h-10 rounded-full border-4 animate-spin"
             style={{
-              borderColor: 'var(--color-primary)',
-              borderTopColor: 'transparent',
+              borderColor: "var(--color-primary)",
+              borderTopColor: "transparent",
             }}
           />
-          <p style={{ color: 'var(--color-text-secondary)' }}>
+          <p style={{ color: "var(--color-text-secondary)" }}>
             Chargement du suivi...
           </p>
         </div>
@@ -457,7 +491,7 @@ export default function TicketTracking() {
     return (
       <div
         className="min-h-screen flex items-center justify-center px-6"
-        style={{ backgroundColor: 'var(--color-bg)' }}
+        style={{ backgroundColor: "var(--color-bg)" }}
       >
         <div className="text-center">
           <AlertCircle
@@ -467,13 +501,13 @@ export default function TicketTracking() {
           />
           <p
             className="text-lg font-semibold mb-4"
-            style={{ color: 'var(--color-danger)' }}
+            style={{ color: "var(--color-danger)" }}
           >
-            {error || 'Ticket introuvable.'}
+            {error || "Ticket introuvable."}
           </p>
           <Button
-            onClick={() => navigate('/')}
-            style={{ backgroundColor: 'var(--color-primary)', color: 'white' }}
+            onClick={() => navigate("/")}
+            style={{ backgroundColor: "var(--color-primary)", color: "white" }}
           >
             Retour à l'accueil
           </Button>
@@ -483,37 +517,39 @@ export default function TicketTracking() {
   }
 
   const timeline = buildTimeline();
-  const isCalled = ticket.status === 'Called' || ticket.status === 'InProgress';
-  const isDone = ticket.status === 'Done';
-  const isWaiting = ticket.status === 'Waiting';
+  const isCalled = ticket.status === "Called" || ticket.status === "InProgress";
+  const isDone = ticket.status === "Done";
+  const isWaiting = ticket.status === "Waiting";
 
   // ── Rendu principal ───────────────────────────────────────────────────────
   return (
     <div
       className="min-h-screen"
-      style={{ backgroundColor: 'var(--color-bg)' }}
+      style={{ backgroundColor: "var(--color-bg)" }}
     >
       {/* ── HEADER ── */}
       <header
         className="w-full px-6 py-4 flex items-center justify-between shadow-sm"
-        style={{ backgroundColor: 'var(--color-dark)' }}
+        style={{ backgroundColor: "var(--color-dark)" }}
       >
         <div className="flex items-center gap-3">
           <div
             className="w-9 h-9 rounded-xl flex items-center justify-center"
-            style={{ backgroundColor: 'var(--color-primary)' }}
+            style={{ backgroundColor: "var(--color-primary)" }}
           >
-            <svg width="20" height="20" viewBox="0 0 52 52" fill="none">
-              <circle cx="26" cy="22" r="12" stroke="white" strokeWidth="3" />
-              <circle cx="26" cy="22" r="5" fill="white" />
-              <circle cx="14" cy="38" r="3" fill="white" opacity="0.7" />
-              <circle cx="26" cy="42" r="3" fill="white" opacity="0.9" />
-              <circle cx="38" cy="38" r="3" fill="white" opacity="0.7" />
+            <svg width="32" height="32" viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="52" height="52" rx="14" fill="#378ADD"/>
+              <circle cx="26" cy="24" r="10" stroke="white" stroke-width="2.5" fill="none"/>
+              <circle cx="26" cy="24" r="4" fill="white"/>
+              <line x1="33" y1="31" x2="40" y2="38" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+              <circle cx="14" cy="38" r="2.5" fill="white" opacity="0.5"/>
+              <circle cx="20" cy="38" r="2.5" fill="white" opacity="0.7"/>
+              <circle cx="26" cy="38" r="2.5" fill="white"/>
             </svg>
           </div>
           <div>
             <p className="font-bold text-white text-sm">Qora</p>
-            <p className="text-xs" style={{ color: 'var(--color-primary)' }}>
+            <p className="text-xs" style={{ color: "var(--color-primary)" }}>
               Suivi de ticket
             </p>
           </div>
@@ -521,25 +557,25 @@ export default function TicketTracking() {
 
         {/* Indicateur connexion temps réel */}
         <div className="flex items-center gap-2">
-          {connected
-            ? <Wifi size={14} color="var(--color-success)" />
-            : <WifiOff size={14} color="var(--color-danger)" />
-          }
-          <span className="text-xs" style={{ color: 'var(--color-primary)' }}>
-            {connected ? 'Temps réel actif' : 'Reconnexion...'}
+          {connected ? (
+            <Wifi size={14} color="var(--color-success)" />
+          ) : (
+            <WifiOff size={14} color="var(--color-danger)" />
+          )}
+          <span className="text-xs" style={{ color: "var(--color-primary)" }}>
+            {connected ? "Temps réel actif" : "Reconnexion..."}
           </span>
         </div>
       </header>
 
       <main className="max-w-2xl mx-auto px-4 py-8">
-
         {/* ── ALERTE — C'EST SON TOUR ── */}
         {isCalled && (
           <div
             className="rounded-2xl p-5 mb-6 text-center"
             style={{
-              backgroundColor: 'rgba(39,174,96,0.1)',
-              border: '2px solid var(--color-success)',
+              backgroundColor: "rgba(39,174,96,0.1)",
+              border: "2px solid var(--color-success)",
             }}
           >
             <Bell
@@ -549,16 +585,16 @@ export default function TicketTracking() {
             />
             <p
               className="text-xl font-bold"
-              style={{ color: 'var(--color-success)' }}
+              style={{ color: "var(--color-success)" }}
             >
               🎉 C'est votre tour !
             </p>
             <p
               className="text-sm mt-1"
-              style={{ color: 'var(--color-text-secondary)' }}
+              style={{ color: "var(--color-text-secondary)" }}
             >
-              Présentez-vous au{' '}
-              <strong style={{ color: 'var(--color-success)' }}>
+              Présentez-vous au{" "}
+              <strong style={{ color: "var(--color-success)" }}>
                 Guichet {position?.counterNumber}
               </strong>
             </p>
@@ -570,7 +606,7 @@ export default function TicketTracking() {
           {/* En-tête carte */}
           <div
             className="px-5 py-3 flex items-center justify-between"
-            style={{ backgroundColor: 'var(--color-dark)' }}
+            style={{ backgroundColor: "var(--color-dark)" }}
           >
             <div className="flex items-center gap-2">
               <Landmark size={16} color="white" />
@@ -581,18 +617,14 @@ export default function TicketTracking() {
             <Badge
               style={{
                 backgroundColor: isCalled
-                  ? 'var(--color-success)'
+                  ? "var(--color-success)"
                   : isDone
-                  ? 'var(--color-success)'
-                  : 'var(--color-primary)',
-                color: 'white',
+                    ? "var(--color-success)"
+                    : "var(--color-primary)",
+                color: "white",
               }}
             >
-              {isCalled
-                ? '🔔 Appelé'
-                : isDone
-                ? '✅ Terminé'
-                : '⏳ En attente'}
+              {isCalled ? "🔔 Appelé" : isDone ? "✅ Terminé" : "⏳ En attente"}
             </Badge>
           </div>
 
@@ -601,30 +633,31 @@ export default function TicketTracking() {
             <div className="text-center mb-6">
               <p
                 className="text-xs font-medium tracking-widest uppercase mb-1"
-                style={{ color: 'var(--color-text-secondary)' }}
+                style={{ color: "var(--color-text-secondary)" }}
               >
                 Numéro de ticket
               </p>
               <p
                 className="text-5xl font-bold tracking-wide"
                 style={{
-                  color: isCalled || isDone
-                    ? 'var(--color-success)'
-                    : 'var(--color-primary)',
+                  color:
+                    isCalled || isDone
+                      ? "var(--color-success)"
+                      : "var(--color-primary)",
                 }}
               >
                 {ticket.ticketNumber}
               </p>
               <p
                 className="text-sm mt-2"
-                style={{ color: 'var(--color-text-secondary)' }}
+                style={{ color: "var(--color-text-secondary)" }}
               >
                 {ticket.serviceName}
               </p>
               {isCalled && position?.counterNumber && (
                 <p
                   className="text-base font-bold mt-1"
-                  style={{ color: 'var(--color-success)' }}
+                  style={{ color: "var(--color-success)" }}
                 >
                   → Guichet {position.counterNumber}
                 </p>
@@ -633,26 +666,21 @@ export default function TicketTracking() {
 
             {/* Métriques */}
             {isWaiting && position && (
-              <div
-                className="grid grid-cols-2 gap-3 mb-4"
-              >
+              <div className="grid grid-cols-2 gap-3 mb-4">
                 <div
                   className="flex flex-col items-center py-3 rounded-xl"
-                  style={{ backgroundColor: 'var(--color-bg)' }}
+                  style={{ backgroundColor: "var(--color-bg)" }}
                 >
-                  <Users
-                    size={18}
-                    style={{ color: 'var(--color-primary)' }}
-                  />
+                  <Users size={18} style={{ color: "var(--color-primary)" }} />
                   <p
                     className="text-2xl font-bold mt-1"
-                    style={{ color: 'var(--color-dark)' }}
+                    style={{ color: "var(--color-dark)" }}
                   >
                     {position.peopleAhead}
                   </p>
                   <p
                     className="text-xs"
-                    style={{ color: 'var(--color-text-secondary)' }}
+                    style={{ color: "var(--color-text-secondary)" }}
                   >
                     personne(s) avant vous
                   </p>
@@ -660,21 +688,18 @@ export default function TicketTracking() {
 
                 <div
                   className="flex flex-col items-center py-3 rounded-xl"
-                  style={{ backgroundColor: 'var(--color-bg)' }}
+                  style={{ backgroundColor: "var(--color-bg)" }}
                 >
-                  <Clock
-                    size={18}
-                    style={{ color: 'var(--color-primary)' }}
-                  />
+                  <Clock size={18} style={{ color: "var(--color-primary)" }} />
                   <p
                     className="text-2xl font-bold mt-1"
-                    style={{ color: 'var(--color-dark)' }}
+                    style={{ color: "var(--color-dark)" }}
                   >
                     ~{position.estimatedWaitTime}
                   </p>
                   <p
                     className="text-xs"
-                    style={{ color: 'var(--color-text-secondary)' }}
+                    style={{ color: "var(--color-text-secondary)" }}
                   >
                     minutes estimées
                   </p>
@@ -687,12 +712,12 @@ export default function TicketTracking() {
               <div className="mb-2">
                 <div
                   className="w-full h-2 rounded-full overflow-hidden"
-                  style={{ backgroundColor: '#E5E7EB' }}
+                  style={{ backgroundColor: "#E5E7EB" }}
                 >
                   <div
                     className="h-full rounded-full transition-all duration-1000"
                     style={{
-                      backgroundColor: 'var(--color-primary)',
+                      backgroundColor: "var(--color-primary)",
                       // Plus il y a de monde, moins la barre est remplie
                       width: `${Math.max(5, 100 - position.peopleAhead * 10)}%`,
                     }}
@@ -700,7 +725,7 @@ export default function TicketTracking() {
                 </div>
                 <p
                   className="text-xs text-right mt-1"
-                  style={{ color: 'var(--color-text-secondary)' }}
+                  style={{ color: "var(--color-text-secondary)" }}
                 >
                   Position {position.position} dans la file
                 </p>
@@ -711,14 +736,14 @@ export default function TicketTracking() {
             <div
               className="flex items-center gap-2 px-3 py-2 rounded-xl mt-3"
               style={{
-                backgroundColor: 'rgba(39,174,96,0.06)',
-                border: '1px solid rgba(39,174,96,0.15)',
+                backgroundColor: "rgba(39,174,96,0.06)",
+                border: "1px solid rgba(39,174,96,0.15)",
               }}
             >
               <Phone size={14} color="var(--color-success)" />
               <p
                 className="text-xs"
-                style={{ color: 'var(--color-text-secondary)' }}
+                style={{ color: "var(--color-text-secondary)" }}
               >
                 Vous serez notifié sur WhatsApp à chaque étape importante.
               </p>
@@ -726,12 +751,53 @@ export default function TicketTracking() {
           </CardContent>
         </Card>
 
+        {/* ── Invitation à noter — affichée quand ticket terminé ── */}
+        {isDone && !alreadyRated && (
+          <div
+            className="rounded-2xl p-5 text-center"
+            style={{
+              backgroundColor: "rgba(245,158,11,0.08)",
+              border: "2px solid rgba(245,158,11,0.3)",
+            }}
+          >
+            <div className="flex justify-center gap-1 mb-3">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <Star
+                  key={star}
+                  size={24}
+                  style={{ color: "#F59E0B", fill: "#F59E0B" }}
+                />
+              ))}
+            </div>
+            <p
+              className="text-base font-semibold mb-1"
+              style={{ color: "var(--color-dark)" }}
+            >
+              Votre service est terminé !
+            </p>
+            <p
+              className="text-sm mb-4"
+              style={{ color: "var(--color-text-secondary)" }}
+            >
+              Prenez 30 secondes pour évaluer votre expérience.
+            </p>
+            <Button
+              onClick={() => navigate(`/ticket/rating/${ticketId}`)}
+              className="w-full"
+              style={{ backgroundColor: "#F59E0B", color: "white" }}
+            >
+              <Star size={16} className="mr-2" />
+              Évaluer mon passage
+            </Button>
+          </div>
+        )}
+
         {/* ── TIMELINE ── */}
         <Card className="mb-6 shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle
               className="text-sm font-semibold"
-              style={{ color: 'var(--color-dark)' }}
+              style={{ color: "var(--color-dark)" }}
             >
               Progression de votre ticket
             </CardTitle>
@@ -748,15 +814,15 @@ export default function TicketTracking() {
                         justify-center shrink-0 z-10"
                       style={{
                         backgroundColor:
-                          step.status === 'done'
-                            ? 'var(--color-success)'
-                            : step.status === 'active'
-                            ? 'var(--color-primary)'
-                            : '#E5E7EB',
+                          step.status === "done"
+                            ? "var(--color-success)"
+                            : step.status === "active"
+                              ? "var(--color-primary)"
+                              : "#E5E7EB",
                         color:
-                          step.status === 'pending'
-                            ? 'var(--color-text-secondary)'
-                            : 'white',
+                          step.status === "pending"
+                            ? "var(--color-text-secondary)"
+                            : "white",
                       }}
                     >
                       {step.icon}
@@ -767,10 +833,10 @@ export default function TicketTracking() {
                         className="w-0.5 flex-1 my-1"
                         style={{
                           backgroundColor:
-                            step.status === 'done'
-                              ? 'var(--color-success)'
-                              : '#E5E7EB',
-                          minHeight: '24px',
+                            step.status === "done"
+                              ? "var(--color-success)"
+                              : "#E5E7EB",
+                          minHeight: "24px",
                         }}
                       />
                     )}
@@ -783,11 +849,11 @@ export default function TicketTracking() {
                         className="text-sm font-semibold"
                         style={{
                           color:
-                            step.status === 'active'
-                              ? 'var(--color-primary)'
-                              : step.status === 'done'
-                              ? 'var(--color-success)'
-                              : 'var(--color-text-secondary)',
+                            step.status === "active"
+                              ? "var(--color-primary)"
+                              : step.status === "done"
+                                ? "var(--color-success)"
+                                : "var(--color-text-secondary)",
                         }}
                       >
                         {step.label}
@@ -795,7 +861,7 @@ export default function TicketTracking() {
                       {step.time && (
                         <span
                           className="text-xs"
-                          style={{ color: 'var(--color-text-secondary)' }}
+                          style={{ color: "var(--color-text-secondary)" }}
                         >
                           {step.time}
                         </span>
@@ -803,7 +869,7 @@ export default function TicketTracking() {
                     </div>
                     <p
                       className="text-xs mt-0.5"
-                      style={{ color: 'var(--color-text-secondary)' }}
+                      style={{ color: "var(--color-text-secondary)" }}
                     >
                       {step.description}
                     </p>
@@ -820,9 +886,9 @@ export default function TicketTracking() {
             <CardHeader className="pb-2">
               <CardTitle
                 className="text-sm font-semibold flex items-center gap-2"
-                style={{ color: 'var(--color-dark)' }}
+                style={{ color: "var(--color-dark)" }}
               >
-                <Bell size={16} style={{ color: 'var(--color-primary)' }} />
+                <Bell size={16} style={{ color: "var(--color-primary)" }} />
                 Notifications reçues
               </CardTitle>
             </CardHeader>
@@ -841,16 +907,13 @@ export default function TicketTracking() {
                         }}
                       >
                         <div className="flex-1">
-                          <p
-                            className="text-xs"
-                            style={{ color: style.color }}
-                          >
+                          <p className="text-xs" style={{ color: style.color }}>
                             {notif.message}
                           </p>
                         </div>
                         <span
                           className="text-xs shrink-0 mt-0.5"
-                          style={{ color: 'var(--color-text-secondary)' }}
+                          style={{ color: "var(--color-text-secondary)" }}
                         >
                           {notif.time}
                         </span>
@@ -871,15 +934,15 @@ export default function TicketTracking() {
               variant="outline"
               onClick={() => {
                 setEditForm({
-                  phone: ticket.clientPhone ?? '',
-                  email: '',
+                  phone: ticket.clientPhone ?? "",
+                  email: "",
                 });
                 setEditOpen(true);
               }}
               className="flex items-center gap-2"
               style={{
-                borderColor: 'var(--color-primary)',
-                color: 'var(--color-primary)',
+                borderColor: "var(--color-primary)",
+                color: "var(--color-primary)",
               }}
             >
               <Pencil size={15} />
@@ -892,8 +955,8 @@ export default function TicketTracking() {
               onClick={() => setCancelOpen(true)}
               className="flex items-center gap-2"
               style={{
-                borderColor: 'var(--color-danger)',
-                color: 'var(--color-danger)',
+                borderColor: "var(--color-danger)",
+                color: "var(--color-danger)",
               }}
             >
               <Trash2 size={15} />
@@ -905,9 +968,9 @@ export default function TicketTracking() {
         {/* Bouton retour accueil si terminé */}
         {isDone && (
           <Button
-            onClick={() => navigate('/')}
+            onClick={() => navigate("/")}
             className="w-full"
-            style={{ backgroundColor: 'var(--color-primary)', color: 'white' }}
+            style={{ backgroundColor: "var(--color-primary)", color: "white" }}
           >
             <Home size={16} className="mr-2" />
             Retour à l'accueil
@@ -919,7 +982,7 @@ export default function TicketTracking() {
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle style={{ color: 'var(--color-dark)' }}>
+            <DialogTitle style={{ color: "var(--color-dark)" }}>
               Modifier mes informations
             </DialogTitle>
           </DialogHeader>
@@ -927,17 +990,17 @@ export default function TicketTracking() {
           <div className="flex flex-col gap-4 py-2">
             <p
               className="text-sm"
-              style={{ color: 'var(--color-text-secondary)' }}
+              style={{ color: "var(--color-text-secondary)" }}
             >
-              Vous pouvez uniquement modifier vos informations de contact.
-              Le service sélectionné ne peut pas être modifié.
+              Vous pouvez uniquement modifier vos informations de contact. Le
+              service sélectionné ne peut pas être modifié.
             </p>
 
             {/* Téléphone */}
             <div className="flex flex-col gap-1.5">
               <label
                 className="text-sm font-medium"
-                style={{ color: 'var(--color-text)' }}
+                style={{ color: "var(--color-text)" }}
               >
                 Téléphone WhatsApp *
               </label>
@@ -949,9 +1012,9 @@ export default function TicketTracking() {
                 placeholder="+237690000000"
                 className="w-full px-4 py-3 rounded-xl border text-sm outline-none"
                 style={{
-                  borderColor: editError ? 'var(--color-danger)' : '#E5E7EB',
-                  backgroundColor: 'var(--color-bg)',
-                  color: 'var(--color-text)',
+                  borderColor: editError ? "var(--color-danger)" : "#E5E7EB",
+                  backgroundColor: "var(--color-bg)",
+                  color: "var(--color-text)",
                 }}
               />
             </div>
@@ -960,12 +1023,12 @@ export default function TicketTracking() {
             <div className="flex flex-col gap-1.5">
               <label
                 className="text-sm font-medium"
-                style={{ color: 'var(--color-text)' }}
+                style={{ color: "var(--color-text)" }}
               >
-                Email{' '}
+                Email{" "}
                 <span
                   className="text-xs font-normal"
-                  style={{ color: 'var(--color-text-secondary)' }}
+                  style={{ color: "var(--color-text-secondary)" }}
                 >
                   (optionnel)
                 </span>
@@ -979,18 +1042,15 @@ export default function TicketTracking() {
                 placeholder="exemple@email.com"
                 className="w-full px-4 py-3 rounded-xl border text-sm outline-none"
                 style={{
-                  borderColor: '#E5E7EB',
-                  backgroundColor: 'var(--color-bg)',
-                  color: 'var(--color-text)',
+                  borderColor: "#E5E7EB",
+                  backgroundColor: "var(--color-bg)",
+                  color: "var(--color-text)",
                 }}
               />
             </div>
 
             {editError && (
-              <p
-                className="text-sm"
-                style={{ color: 'var(--color-danger)' }}
-              >
+              <p className="text-sm" style={{ color: "var(--color-danger)" }}>
                 {editError}
               </p>
             )}
@@ -1004,9 +1064,12 @@ export default function TicketTracking() {
             <Button
               onClick={handleEdit}
               disabled={editLoading}
-              style={{ backgroundColor: 'var(--color-primary)', color: 'white' }}
+              style={{
+                backgroundColor: "var(--color-primary)",
+                color: "white",
+              }}
             >
-              {editLoading ? 'Mise à jour...' : 'Enregistrer'}
+              {editLoading ? "Mise à jour..." : "Enregistrer"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1016,7 +1079,7 @@ export default function TicketTracking() {
       <Dialog open={cancelOpen} onOpenChange={setCancelOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle style={{ color: 'var(--color-danger)' }}>
+            <DialogTitle style={{ color: "var(--color-danger)" }}>
               Annuler mon ticket
             </DialogTitle>
           </DialogHeader>
@@ -1024,30 +1087,27 @@ export default function TicketTracking() {
           <div className="py-2">
             <p
               className="text-sm"
-              style={{ color: 'var(--color-text-secondary)' }}
+              style={{ color: "var(--color-text-secondary)" }}
             >
-              Êtes-vous sûr de vouloir annuler votre ticket{' '}
-              <strong style={{ color: 'var(--color-dark)' }}>
+              Êtes-vous sûr de vouloir annuler votre ticket{" "}
+              <strong style={{ color: "var(--color-dark)" }}>
                 {ticket.ticketNumber}
-              </strong>{' '}
+              </strong>{" "}
               ? Cette action est irréversible.
             </p>
           </div>
 
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setCancelOpen(false)}
-            >
+            <Button variant="outline" onClick={() => setCancelOpen(false)}>
               Garder mon ticket
             </Button>
             <Button
               onClick={handleCancel}
               disabled={cancelLoading}
-              style={{ backgroundColor: 'var(--color-danger)', color: 'white' }}
+              style={{ backgroundColor: "var(--color-danger)", color: "white" }}
             >
               <Trash2 size={15} className="mr-1" />
-              {cancelLoading ? 'Annulation...' : 'Confirmer l\'annulation'}
+              {cancelLoading ? "Annulation..." : "Confirmer l'annulation"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1055,11 +1115,8 @@ export default function TicketTracking() {
 
       {/* Footer */}
       <footer className="text-center py-6">
-        <p
-          className="text-xs"
-          style={{ color: 'var(--color-text-secondary)' }}
-        >
-          © 2024 Qora — SCB Cameroun. Tous droits réservés.
+        <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
+          © 2026 Qora — SCB Cameroun. Tous droits réservés.
         </p>
       </footer>
     </div>

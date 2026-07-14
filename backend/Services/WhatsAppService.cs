@@ -176,4 +176,27 @@ public class WhatsAppService
 
         await _context.SaveChangesAsync();
     }
+
+    // Notification envoyée après que le ticket est terminé (Done)
+    // Invite le client à noter son expérience
+    public async Task SendRatingRequestAsync(Ticket ticket)
+    {
+        var client = await _context.Clients.FindAsync(ticket.ClientId);
+        if (client == null) return;
+
+        // URL de la page de notation — à adapter selon le domaine
+        var ratingUrl = $"http://localhost:5173/ticket/rating/{ticket.Id}";
+
+        var message =
+            $"✅ *Merci pour votre visite, {client.FirstName} !*\n\n" +
+            $"Votre demande a été traitée avec succès.\n\n" +
+            $"🎫 *Ticket :* {ticket.TicketNumber}\n" +
+            $"🏦 *Service :* {(await _context.Services.FindAsync(ticket.ServiceId))?.Name}\n\n" +
+            $"⭐ *Notez votre expérience :*\n" +
+            $"{ratingUrl}\n\n" +
+            $"Votre avis nous aide à améliorer nos services.\n\n" +
+            $"_SCB Cameroun — Qora Queue Management_";
+
+        await SaveAndSendAsync(ticket.Id, client.Phone, message);
+    }
 }

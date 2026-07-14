@@ -11,15 +11,6 @@ public class Rating
     public string? Comment { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-    public Rating(int id, int ticketId, int score, string? comment, DateTime createdAt)
-    {
-        Id = id;
-        TicketId = ticketId;
-        Score = score;
-        Comment = comment;
-        CreatedAt = createdAt;
-    }
-
     // Navigation
     public Ticket Ticket { get; set; } = null!;
 }

@@ -61,3 +61,26 @@ public class TicketUpdateClientDto
     // Nouvel email (optionnel)
     public string? Email { get; set; }
 }
+
+// Données envoyées par le client pour noter son passage
+public class RatingCreateDto
+{
+    // Note de 1 à 5 étoiles — obligatoire
+    public int Score { get; set; }
+
+    // Commentaire optionnel
+    public string? Comment { get; set; }
+}
+
+// Données retournées après création ou consultation d'une notation
+public class RatingResponseDto
+{
+    public int Id { get; set; }
+    public int TicketId { get; set; }
+    public string TicketNumber { get; set; } = string.Empty;
+    public string ServiceName { get; set; } = string.Empty;
+    public string ClientName { get; set; } = string.Empty;
+    public int Score { get; set; }
+    public string? Comment { get; set; }
+    public DateTime CreatedAt { get; set; }
+}

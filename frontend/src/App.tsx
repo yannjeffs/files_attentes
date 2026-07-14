@@ -17,6 +17,7 @@ import AgentsManager from "./pages/admin/AgentsManager";
 import AuditLogs from "./pages/admin/AuditLogs";
 import CountersManager from "./pages/admin/CountersManager";
 import Ratings from "./pages/admin/Ratings";
+import TicketRating from "./pages/client/TicketRating";
 
 // Guard routes protégées
 const ProtectedRoute = ({
@@ -49,6 +50,8 @@ function App() {
         <Route path="/display" element={<QueueDisplay />} />
         <Route path="/login" element={<Login />} />
         <Route path="/ticket/suivi/:ticketId" element={<TicketTracking />} />
+        <Route path="/ticket/rating/:ticketId" element={<TicketRating />} />
+        
         {/* Agent */}
         <Route
           path="/agent"

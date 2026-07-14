@@ -222,8 +222,13 @@ public class TicketsController : ControllerBase
 
         var ticketDto = MapToResponseDto(ticket);
 
-        // Notifier via SignalR
-        await _notificationService.NotifyTicketCompletedAsync(ticket.Service.AgencyId, ticketDto);
+        // SignalR — notifier tous les écrans
+        await _notificationService.NotifyTicketCompletedAsync(
+            ticket.Service.AgencyId, ticketDto);
+
+        // WhatsApp — notifier le client que c'est terminé
+        //            + envoyer le lien de notation
+        await _whatsAppService.SendRatingRequestAsync(ticket);
 
         return Ok(ticketDto);
     }
