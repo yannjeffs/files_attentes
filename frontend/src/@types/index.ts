@@ -116,3 +116,13 @@ export interface TicketUpdateClientRequest {
   phone: string;
   email?: string;
 }
+
+export interface DashboardStats {
+  waitingCount: number;
+  inServiceCount: number;
+  servedCount: number;
+  noShowCount: number;
+  totalCounters: number;
+  averageWaitTime: number;
+  averageServiceTime: number;
+}
