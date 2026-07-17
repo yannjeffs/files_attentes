@@ -15,16 +15,6 @@ public class AuditLog
     public string? IpAddress { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-    public AuditLog(string action, string entityType, string entityId, string? oldValues = null, string? newValues = null, string? ipAddress = null)
-    {
-        Action = action;
-        EntityType = entityType;
-        EntityId = entityId;
-        OldValues = oldValues;
-        NewValues = newValues;
-        IpAddress = ipAddress;
-    }
-
     // Navigation
     public User? User { get; set; }
 }

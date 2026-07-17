@@ -24,6 +24,7 @@ builder.Services.AddScoped<JwtService>();
 builder.Services.AddScoped<QueueService>();
 builder.Services.AddScoped<QueueNotificationService>();
 builder.Services.AddScoped<WhatsAppService>();
+builder.Services.AddScoped<AuditService>();
 
 // Authentication JWT
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

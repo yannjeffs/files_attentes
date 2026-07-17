@@ -187,22 +187,22 @@ export default function TicketTracking() {
       // Ajouter une notification selon la position
       if (update.peopleAhead === 1) {
         addNotification(
-          "⚡ Vous êtes le suivant ! Préparez-vous à vous présenter au guichet.",
+          "Vous êtes le suivant ! Préparez-vous à vous présenter au guichet.",
           "warning",
         );
       } else if (update.peopleAhead === 3) {
         addNotification(
-          `⏳ Plus que 3 personnes avant vous (~${update.estimatedWaitTime} min).`,
+          `Plus que 3 personnes avant vous (~${update.estimatedWaitTime} min).`,
           "info",
         );
       } else if (update.peopleAhead === 5) {
         addNotification(
-          `📊 Plus que 5 personnes avant vous (~${update.estimatedWaitTime} min).`,
+          `Plus que 5 personnes avant vous (~${update.estimatedWaitTime} min).`,
           "info",
         );
       } else {
         addNotification(
-          `📊 Position mise à jour : ${update.peopleAhead} personne(s) avant vous.`,
+          `Position mise à jour : ${update.peopleAhead} personne(s) avant vous.`,
           "info",
         );
       }
@@ -229,7 +229,7 @@ export default function TicketTracking() {
 
       // Notification importante
       addNotification(
-        `🔔 C'est votre tour ! Présentez-vous au guichet ${calledTicket.counterNumber}.`,
+        `C'est votre tour ! Présentez-vous au guichet ${calledTicket.counterNumber}.`,
         "success",
       );
 
@@ -250,7 +250,7 @@ export default function TicketTracking() {
       if (startedTicket.ticketNumber !== ticket.ticketNumber) return;
       setTicket(startedTicket);
       addNotification(
-        "✅ Votre traitement a démarré. L'agent s'occupe de vous.",
+        "Votre traitement a démarré. L'agent s'occupe de vous.",
         "success",
       );
     });
@@ -261,7 +261,7 @@ export default function TicketTracking() {
       if (completedTicket.ticketNumber !== ticket.ticketNumber) return;
       setTicket(completedTicket);
       addNotification(
-        "✅ Votre ticket a été traité avec succès. Merci de votre visite !",
+        "Votre ticket a été traité avec succès. Merci de votre visite !",
         "success",
       );
       // Vérifier si déjà noté
@@ -335,7 +335,7 @@ export default function TicketTracking() {
       setTicket(updated);
       setEditOpen(false);
       addNotification(
-        "✅ Vos informations de contact ont été mises à jour.",
+        "Vos informations de contact ont été mises à jour.",
         "success",
       );
     } catch {
@@ -624,7 +624,7 @@ export default function TicketTracking() {
                 color: "white",
               }}
             >
-              {isCalled ? "🔔 Appelé" : isDone ? "✅ Terminé" : "⏳ En attente"}
+              {isCalled ? "Appelé" : isDone ? "Terminé" : "En attente"}
             </Badge>
           </div>
 

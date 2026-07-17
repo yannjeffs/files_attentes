@@ -126,3 +126,24 @@ export interface DashboardStats {
   averageWaitTime: number;
   averageServiceTime: number;
 }
+
+export interface AuditLog {
+  id: number;
+  action: string;
+  entityType: string;
+  entityId: string;
+  oldValues?: string;
+  newValues?: string;
+  ipAddress?: string;
+  createdAt: string;
+  userName: string;
+  userRole?: string;
+}
+
+export interface AuditLogResponse {
+  items: AuditLog[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
