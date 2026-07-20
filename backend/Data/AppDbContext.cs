@@ -54,6 +54,14 @@ public class AppDbContext : DbContext
             .Property(u => u.Role)
             .HasConversion<string>();
 
+        // User → Counter (un agent est assigné à un guichet)
+        // Restrict pour éviter les cascades multiples
+        modelBuilder.Entity<User>()
+            .HasOne(u => u.Counter)
+            .WithMany()
+            .HasForeignKey(u => u.CounterId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         modelBuilder.Entity<Ticket>()
             .Property(t => t.Status)
             .HasConversion<string>();

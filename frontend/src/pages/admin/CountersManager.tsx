@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   Plus, Pencil, CheckCircle, XCircle,
-  Search, RefreshCw, AlertCircle, Monitor
+  Search, RefreshCw, AlertCircle, Monitor, Settings, User
 } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
@@ -11,27 +11,10 @@ import {
   DialogTitle, DialogFooter
 } from '../../components/ui/dialog';
 import { useAuthStore } from '../../store/authStore';
-import type { Counter } from '../../@types';
-import api from '../../services/api';
-
-// ── Service guichets ──────────────────────────────────────────────
-const counterService = {
-  getAll: async (agencyId: number): Promise<Counter[]> => {
-    const res = await api.get<Counter[]>(`/counters?agencyId=${agencyId}`);
-    return res.data;
-  },
-  create: async (data: object): Promise<Counter> => {
-    const res = await api.post<Counter>('/counters', data);
-    return res.data;
-  },
-  update: async (id: number, data: object): Promise<Counter> => {
-    const res = await api.put<Counter>(`/counters/${id}`, data);
-    return res.data;
-  },
-  delete: async (id: number): Promise<void> => {
-    await api.delete(`/counters/${id}`);
-  },
-};
+import type { Counter, Service } from '../../@types';
+import { counterService } from '../../services/counterService';
+import { serviceService } from '../../services/serviceService';
+import { userService } from '../../services/userService';
 
 const emptyForm = { number: '', name: '' };
 
@@ -42,6 +25,12 @@ export default function CountersManager() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [error, setError] = useState('');
+
+  // Guichet → Service (via ServiceCounter) et Guichet → Agent assigné
+  const [counterServiceMap, setCounterServiceMap] =
+    useState<Record<number, Service>>({});
+  const [counterAgentMap, setCounterAgentMap] =
+    useState<Record<number, string>>({});
 
   // Modal création/édition
   const [modalOpen, setModalOpen] = useState(false);
@@ -67,8 +56,40 @@ export default function CountersManager() {
 
     const fetch = async () => {
       try {
-        const data = await counterService.getAll(user.agencyId);
-        if (!cancelled) setCounters(data);
+        const [countersData, servicesData, agentsData] = await Promise.all([
+          counterService.getAll(user.agencyId),
+          serviceService.getAll(user.agencyId),
+          userService.getAll(user.agencyId),
+        ]);
+        if (cancelled) return;
+        setCounters(countersData);
+
+        // Construire la map guichet → service en interrogeant
+        // les guichets assignés à chaque service
+        const serviceLinks = await Promise.all(
+          servicesData.map(async (service) => {
+            const linkedCounters = await counterService.getByService(service.id);
+            return { service, linkedCounters };
+          })
+        );
+        if (cancelled) return;
+
+        const svcMap: Record<number, Service> = {};
+        serviceLinks.forEach(({ service, linkedCounters }) => {
+          linkedCounters.forEach((c) => {
+            svcMap[c.id] = service;
+          });
+        });
+        setCounterServiceMap(svcMap);
+
+        // Map guichet → agent assigné
+        const agtMap: Record<number, string> = {};
+        agentsData.forEach((agent) => {
+          if (agent.counterId) {
+            agtMap[agent.counterId] = `${agent.firstName} ${agent.lastName}`;
+          }
+        });
+        setCounterAgentMap(agtMap);
       } catch {
         if (!cancelled) setError('Impossible de charger les guichets.');
       } finally {
@@ -315,6 +336,53 @@ export default function CountersManager() {
                 >
                   {counter.name}
                 </p>
+
+                {/* Service lié */}
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <Settings
+                    size={12}
+                    style={{ color: 'var(--color-text-secondary)' }}
+                  />
+                  {counterServiceMap[counter.id] ? (
+                    <span
+                      className="text-xs font-medium"
+                      style={{ color: 'var(--color-primary)' }}
+                    >
+                      {counterServiceMap[counter.id].name}
+                    </span>
+                  ) : (
+                    <span
+                      className="text-xs italic"
+                      style={{ color: 'var(--color-text-secondary)' }}
+                    >
+                      Aucun service assigné
+                    </span>
+                  )}
+                </div>
+
+                {/* Agent assigné */}
+                <div className="flex items-center gap-1.5 mb-3">
+                  <User
+                    size={12}
+                    style={{ color: 'var(--color-text-secondary)' }}
+                  />
+                  {counterAgentMap[counter.id] ? (
+                    <span
+                      className="text-xs font-medium"
+                      style={{ color: 'var(--color-dark)' }}
+                    >
+                      {counterAgentMap[counter.id]}
+                    </span>
+                  ) : (
+                    <span
+                      className="text-xs italic"
+                      style={{ color: 'var(--color-text-secondary)' }}
+                    >
+                      Aucun agent assigné
+                    </span>
+                  )}
+                </div>
+
                 <p
                   className="text-xs mb-4"
                   style={{ color: 'var(--color-text-secondary)' }}

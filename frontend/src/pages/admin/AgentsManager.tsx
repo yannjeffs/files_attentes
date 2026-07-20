@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import {
   Plus, Pencil, CheckCircle, XCircle,
   Search, RefreshCw, AlertCircle, Users,
-  Shield, User
+  Shield, User, Monitor
 } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { Card, CardContent } from '../../components/ui/card';
@@ -17,54 +17,9 @@ import {
   SelectTrigger, SelectValue
 } from '../../components/ui/select';
 import { useAuthStore } from '../../store/authStore';
-import api from '../../services/api';
-
-// ── Types ─────────────────────────────────────────────────────────
-interface Agent {
-  id: number;
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone?: string;
-  role: 'Admin' | 'Agent';
-  isActive: boolean;
-  agencyId: number;
-  createdAt: string;
-}
-
-interface AgentCreateDto {
-  firstName: string;
-  lastName: string;
-  email: string;
-  password: string;
-  phone?: string;
-  role: string;
-  agencyId: number;
-}
-
-// ── Service agents ─────────────────────────────────────────────────
-const agentService = {
-  getAll: async (agencyId: number): Promise<Agent[]> => {
-    const res = await api.get<Agent[]>(
-      `/users?agencyId=${agencyId}`
-    );
-    return res.data;
-  },
-  create: async (data: AgentCreateDto): Promise<Agent> => {
-    const res = await api.post<Agent>('/auth/register', data);
-    return res.data;
-  },
-  update: async (id: number, data: object): Promise<Agent> => {
-    const res = await api.put<Agent>(`/users/${id}`, data);
-    return res.data;
-  },
-  toggleActive: async (id: number, isActive: boolean): Promise<Agent> => {
-    const res = await api.put<Agent>(`/users/${id}/toggle-active`, {
-      isActive,
-    });
-    return res.data;
-  },
-};
+import { userService, type Agent } from '../../services/userService';
+import { counterService, type CounterMini } from '../../services/counterService';
+import { serviceService } from '../../services/serviceService';
 
 const emptyForm = {
   firstName: '',
@@ -73,6 +28,7 @@ const emptyForm = {
   password: '',
   phone: '',
   role: 'Agent',
+  counterId: '',
 };
 
 export default function AgentsManager() {
@@ -82,6 +38,11 @@ export default function AgentsManager() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [error, setError] = useState('');
+
+  // Guichets — pour l'assignation et l'affichage du service géré
+  const [counters, setCounters] = useState<CounterMini[]>([]);
+  const [counterServiceNames, setCounterServiceNames] =
+    useState<Record<number, string>>({});
 
   // Modal création/édition
   const [modalOpen, setModalOpen] = useState(false);
@@ -110,15 +71,42 @@ export default function AgentsManager() {
     agents: agents.filter((a) => a.role === 'Agent').length,
   }), [agents]);
 
+  // Guichets libres (non assignés à un autre agent actif) — ou déjà
+  // assigné à l'agent en cours d'édition
+  const availableCounters = useMemo(() => {
+    const takenIds = new Set(
+      agents
+        .filter((a) => a.isActive && a.id !== editingAgent?.id && a.counterId)
+        .map((a) => a.counterId)
+    );
+    return counters.filter((c) => c.isActive && !takenIds.has(c.id));
+  }, [counters, agents, editingAgent]);
+
   // ── Chargement ────────────────────────────────────────────────
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
 
-    const fetchAgents = async () => {
+    const fetchAll = async () => {
       try {
-        const data = await agentService.getAll(user.agencyId);
-        if (!cancelled) setAgents(data);
+        const [agentsData, countersData, servicesData] = await Promise.all([
+          userService.getAll(user.agencyId),
+          counterService.getAll(user.agencyId),
+          serviceService.getAll(user.agencyId),
+        ]);
+        if (cancelled) return;
+        setAgents(agentsData);
+        setCounters(countersData);
+
+        // Construire la map guichet → nom du service
+        const links = await Promise.all(
+          servicesData.map(async (service) => {
+            const linked = await counterService.getByService(service.id);
+            return linked.map((c) => [c.id, service.name] as const);
+          })
+        );
+        if (cancelled) return;
+        setCounterServiceNames(Object.fromEntries(links.flat()));
       } catch {
         if (!cancelled)
           setError('Impossible de charger les agents.');
@@ -127,7 +115,7 @@ export default function AgentsManager() {
       }
     };
 
-    fetchAgents();
+    fetchAll();
     return () => { cancelled = true; };
   }, [user?.agencyId, user]);
 
@@ -149,6 +137,7 @@ export default function AgentsManager() {
       password: '',
       phone: agent.phone ?? '',
       role: agent.role,
+      counterId: agent.counterId ? String(agent.counterId) : '',
     });
     setFormError('');
     setModalOpen(true);
@@ -180,22 +169,28 @@ export default function AgentsManager() {
     setFormLoading(true);
     setFormError('');
 
+    const newCounterId = form.role === 'Agent' && form.counterId
+      ? Number(form.counterId)
+      : null;
+
     try {
       if (editingAgent) {
-        // Mise à jour
-        const updated = await agentService.update(editingAgent.id, {
+        // 1. Mise à jour des infos de profil
+        await userService.update(editingAgent.id, {
           firstName: form.firstName.trim(),
           lastName: form.lastName.trim(),
-          email: form.email.trim(),
           phone: form.phone.trim() || undefined,
           role: form.role,
         });
-        setAgents((prev) =>
-          prev.map((a) => (a.id === updated.id ? updated : a))
-        );
+
+        // 2. Mise à jour du guichet assigné si elle a changé
+        const previousCounterId = editingAgent.counterId ?? null;
+        if (newCounterId !== previousCounterId) {
+          await userService.assignCounter(editingAgent.id, newCounterId);
+        }
       } else {
         // Création via /auth/register
-        await agentService.create({
+        await userService.create({
           firstName: form.firstName.trim(),
           lastName: form.lastName.trim(),
           email: form.email.trim(),
@@ -203,11 +198,12 @@ export default function AgentsManager() {
           phone: form.phone.trim() || undefined,
           role: form.role,
           agencyId: user!.agencyId,
+          counterId: newCounterId,
         });
-        // Recharger la liste
-        const data = await agentService.getAll(user!.agencyId);
-        setAgents(data);
       }
+      // Recharger la liste — garantit des infos de guichet/service à jour
+      const data = await userService.getAll(user!.agencyId);
+      setAgents(data);
       setModalOpen(false);
     } catch (err: unknown) {
       const message = (err as { response?: { data?: { message?: string } } })
@@ -226,11 +222,11 @@ export default function AgentsManager() {
       return;
     }
     try {
-      const updated = await agentService.toggleActive(
+      const updated = await userService.toggleActive(
         agent.id, !agent.isActive
       );
       setAgents((prev) =>
-        prev.map((a) => (a.id === updated.id ? updated : a))
+        prev.map((a) => (a.id === updated.id ? { ...a, ...updated } : a))
       );
     } catch {
       setError('Impossible de modifier le statut de cet agent.');
@@ -392,7 +388,7 @@ export default function AgentsManager() {
                       borderBottom: '1px solid #E5E7EB',
                     }}
                   >
-                    {['Agent', 'Email', 'Rôle', 'Statut', 'Créé le', 'Actions'].map(
+                    {['Agent', 'Email', 'Rôle', 'Guichet', 'Statut', 'Créé le', 'Actions'].map(
                       (col) => (
                         <th
                           key={col}
@@ -502,6 +498,41 @@ export default function AgentsManager() {
                             <><User size={11} className="mr-1" />Agent</>
                           )}
                         </Badge>
+                      </td>
+
+                      {/* Guichet assigné */}
+                      <td className="px-4 py-3">
+                        {agent.counterId ? (
+                          <div className="flex items-center gap-1.5">
+                            <Monitor
+                              size={12}
+                              style={{ color: 'var(--color-primary)' }}
+                            />
+                            <div>
+                              <p
+                                className="text-xs font-medium"
+                                style={{ color: 'var(--color-dark)' }}
+                              >
+                                Guichet {agent.counterNumber ?? agent.counterId}
+                              </p>
+                              {counterServiceNames[agent.counterId] && (
+                                <p
+                                  className="text-xs"
+                                  style={{ color: 'var(--color-text-secondary)' }}
+                                >
+                                  {counterServiceNames[agent.counterId]}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <span
+                            className="text-xs italic"
+                            style={{ color: 'var(--color-text-secondary)' }}
+                          >
+                            Non assigné
+                          </span>
+                        )}
                       </td>
 
                       {/* Statut */}
@@ -762,7 +793,14 @@ export default function AgentsManager() {
               </label>
               <Select
                 value={form.role}
-                onValueChange={(val) => setForm({ ...form, role: val })}
+                onValueChange={(val) =>
+                  setForm({
+                    ...form,
+                    role: val,
+                    // Un guichet ne peut être assigné qu'à un Agent
+                    counterId: val === 'Agent' ? form.counterId : '',
+                  })
+                }
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Choisir un rôle..." />
@@ -783,6 +821,48 @@ export default function AgentsManager() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Guichet assigné — uniquement pour un Agent */}
+            {form.role === 'Agent' && (
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium"
+                  style={{ color: 'var(--color-text)' }}>
+                  Guichet assigné{' '}
+                  <span className="text-xs font-normal"
+                    style={{ color: 'var(--color-text-secondary)' }}>
+                    (optionnel)
+                  </span>
+                </label>
+                <Select
+                  value={form.counterId || 'none'}
+                  onValueChange={(val) =>
+                    setForm({ ...form, counterId: val === 'none' ? '' : val })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Aucun guichet..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Aucun guichet</SelectItem>
+                    {availableCounters.map((counter) => (
+                      <SelectItem key={counter.id} value={String(counter.id)}>
+                        Guichet {counter.number} — {counter.name}
+                        {counterServiceNames[counter.id]
+                          ? ` (${counterServiceNames[counter.id]})`
+                          : ' (aucun service lié)'}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p
+                  className="text-xs"
+                  style={{ color: 'var(--color-text-secondary)' }}
+                >
+                  L'agent ne verra que les clients du service lié à ce
+                  guichet. Seuls les guichets libres sont proposés.
+                </p>
+              </div>
+            )}
 
             {/* Erreur */}
             {formError && (

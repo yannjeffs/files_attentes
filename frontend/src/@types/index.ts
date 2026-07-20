@@ -147,3 +147,28 @@ export interface AuditLogResponse {
   pageSize: number;
   totalPages: number;
 }
+
+// Évaluations
+export interface Rating {
+  id: number;
+  ticketId: number;
+  ticketNumber: string;
+  serviceName: string;
+  clientName: string;
+  score: number;
+  comment?: string;
+  createdAt: string;
+}
+
+export type ScoreDistribution = Record<number, number>;
+
+export interface RatingListResponse {
+  items: Rating[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  totalRatings: number;
+  averageScore: number;
+  distribution: ScoreDistribution;
+}

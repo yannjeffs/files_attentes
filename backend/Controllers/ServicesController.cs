@@ -141,4 +141,92 @@ public class ServicesController : ControllerBase
 
         return Ok(new { message = "Le service a été désactivé." });
     }
+
+    // POST api/services/{serviceId}/counters/{counterId}
+// Assigner un guichet à un service
+[HttpPost("{serviceId}/counters/{counterId}")]
+[Authorize(Roles = "Admin")]
+public async Task<IActionResult> AssignCounter(
+    int serviceId, int counterId)
+{
+    var service = await _context.Services.FindAsync(serviceId);
+    if (service == null)
+        return NotFound(new { message = "Service introuvable." });
+
+    var counter = await _context.Counters.FindAsync(counterId);
+    if (counter == null)
+        return NotFound(new { message = "Guichet introuvable." });
+
+    // Vérifier que la liaison n'existe pas déjà
+    var exists = await _context.ServiceCounters
+        .AnyAsync(sc =>
+            sc.ServiceId == serviceId &&
+            sc.CounterId == counterId);
+
+    if (exists)
+        return BadRequest(new
+        {
+            message = "Ce guichet est déjà assigné à ce service."
+        });
+
+    var serviceCounter = new ServiceCounter
+    {
+        ServiceId = serviceId,
+        CounterId = counterId,
+    };
+
+    _context.ServiceCounters.Add(serviceCounter);
+    await _context.SaveChangesAsync();
+
+    return Ok(new
+    {
+        message = "Guichet assigné au service avec succès.",
+        serviceId,
+        counterId,
+    });
+}
+
+// DELETE api/services/{serviceId}/counters/{counterId}
+// Désassigner un guichet d'un service
+[HttpDelete("{serviceId}/counters/{counterId}")]
+[Authorize(Roles = "Admin")]
+public async Task<IActionResult> UnassignCounter(
+    int serviceId, int counterId)
+{
+    var sc = await _context.ServiceCounters
+        .FirstOrDefaultAsync(sc =>
+            sc.ServiceId == serviceId &&
+            sc.CounterId == counterId);
+
+    if (sc == null)
+        return NotFound(new
+        {
+            message = "Cette liaison service-guichet n'existe pas."
+        });
+
+    _context.ServiceCounters.Remove(sc);
+    await _context.SaveChangesAsync();
+
+    return Ok(new { message = "Guichet désassigné du service." });
+}
+
+// GET api/services/{serviceId}/counters
+// Liste des guichets d'un service
+[HttpGet("{serviceId}/counters")]
+public async Task<IActionResult> GetCounters(int serviceId)
+{
+    var counters = await _context.ServiceCounters
+        .Include(sc => sc.Counter)
+        .Where(sc => sc.ServiceId == serviceId)
+        .Select(sc => new
+        {
+            sc.Counter.Id,
+            sc.Counter.Number,
+            sc.Counter.Name,
+            sc.Counter.IsActive,
+        })
+        .ToListAsync();
+
+    return Ok(counters);
+}
 }

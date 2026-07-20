@@ -484,7 +484,10 @@ public class TicketsController : ControllerBase
         return Ok(MapToResponseDto(ticket));
     }
 
-    // GET api/tickets/queue/{serviceId}
+    // GET api/tickets/queue
+    // Si l'agent est connecté → retourne uniquement les tickets
+    // de son service (lié à son guichet)
+    // Si admin → retourne tous les tickets du serviceId passé
     [HttpGet("queue/{serviceId}")]
     [Authorize]
     public async Task<IActionResult> GetQueue(int serviceId)
@@ -494,14 +497,95 @@ public class TicketsController : ControllerBase
             .Include(t => t.Client)
             .Include(t => t.Counter)
             .Include(t => t.Agent)
-            .Where(t => t.ServiceId == serviceId &&
-                   (t.Status == TicketStatus.Waiting ||
-                    t.Status == TicketStatus.Called))
+            .Where(t =>
+                t.ServiceId == serviceId &&
+                (t.Status == TicketStatus.Waiting ||
+                 t.Status == TicketStatus.Called ||
+                 t.Status == TicketStatus.InProgress))
             .OrderByDescending(t => t.Priority == TicketPriority.VIP)
             .ThenBy(t => t.IssuedAt)
             .ToListAsync();
 
         return Ok(tickets.Select(MapToResponseDto));
+    }
+
+    // GET api/tickets/my-queue
+    // Nouveau endpoint — retourne uniquement les tickets
+    // du service lié au guichet de l'agent connecté
+    [HttpGet("my-queue")]
+    [Authorize(Roles = "Agent,Admin")]
+    public async Task<IActionResult> GetMyQueue()
+    {
+        // Récupérer l'ID de l'agent connecté depuis le token JWT
+        var agentId = int.Parse(
+            User.FindFirst(System.Security.Claims.ClaimTypes
+                .NameIdentifier)!.Value);
+
+        // Charger l'agent avec son guichet et le service lié
+        var agent = await _context.Users
+            .Include(u => u.Counter)
+                .ThenInclude(c => c != null
+                    ? c.ServiceCounters : null)
+            .FirstOrDefaultAsync(u => u.Id == agentId);
+
+        if (agent == null)
+            return NotFound(new { message = "Agent introuvable." });
+
+        // Si l'agent n'a pas de guichet assigné
+        if (agent.CounterId == null || agent.Counter == null)
+            return Ok(new
+            {
+                tickets = new List<object>(),
+                serviceId = (int?)null,
+                serviceName = (string?)null,
+                counterId = (int?)null,
+                counterName = (string?)null,
+                message = "Aucun guichet assigné à cet agent."
+            });
+
+        // Récupérer le service lié au guichet de l'agent
+        var serviceCounter = agent.Counter.ServiceCounters
+            .FirstOrDefault();
+
+        if (serviceCounter == null)
+            return Ok(new
+            {
+                tickets = new List<object>(),
+                serviceId = (int?)null,
+                serviceName = (string?)null,
+                counterId = agent.CounterId,
+                counterName = agent.Counter.Name,
+                message = "Aucun service assigné à ce guichet."
+            });
+
+        // Charger les tickets du service de l'agent
+        var tickets = await _context.Tickets
+            .Include(t => t.Service)
+            .Include(t => t.Client)
+            .Include(t => t.Counter)
+            .Include(t => t.Agent)
+            .Where(t =>
+                t.ServiceId == serviceCounter.ServiceId &&
+                (t.Status == TicketStatus.Waiting ||
+                 t.Status == TicketStatus.Called ||
+                 t.Status == TicketStatus.InProgress))
+            .OrderByDescending(t =>
+                t.Priority == TicketPriority.VIP)
+            .ThenBy(t => t.IssuedAt)
+            .ToListAsync();
+
+        // Charger le nom du service
+        var service = await _context.Services
+            .FindAsync(serviceCounter.ServiceId);
+
+        return Ok(new
+        {
+            tickets = tickets.Select(MapToResponseDto),
+            serviceId = serviceCounter.ServiceId,
+            serviceName = service?.Name,
+            counterId = agent.CounterId,
+            counterName = agent.Counter.Name,
+        });
     }
 
     private static TicketResponseDto MapToResponseDto(Ticket ticket)
